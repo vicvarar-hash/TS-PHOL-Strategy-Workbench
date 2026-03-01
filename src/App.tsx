@@ -31,7 +31,9 @@ import {
   Download,
   Upload,
   BookOpen,
-  HelpCircle
+  HelpCircle,
+  X,
+  BrainCircuit
 } from 'lucide-react';
 import { 
   XAxis, 
@@ -52,13 +54,268 @@ import { useInference } from './hooks/useInference';
 import { Onboarding } from './components/Onboarding';
 import { DecisionCard } from './components/DecisionCard';
 import { MapGrid } from './components/MapGrid';
-import { STRATA_LABELS } from './engine/tsphol';
-import { GroundedFact, TabType, GamePhase, LogicRule, ZoneState } from './types';
+import { TSPHOL_Engine, STRATA_LABELS } from './engine/tsphol';
+import { GroundedFact, TabType, GamePhase, LogicRule, ZoneState, TurnReport } from './types';
 
 // --- Components ---
 
-const InteractiveProof: React.FC<{ fact: GroundedFact | null, onHighlight: (zoneId: string | null) => void }> = ({ fact, onHighlight }) => {
+const AR_ML_Explainer: React.FC = () => (
+  <div className="bg-slate-900/80 border border-indigo-500/30 rounded-2xl p-6 mb-8 relative overflow-hidden">
+    <div className="absolute top-0 right-0 p-4 opacity-10">
+      <Network size={64} className="text-indigo-400" />
+    </div>
+    <div className="relative z-10">
+      <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-indigo-400">
+        <Layers size={18} /> AR + ML Composition Architecture
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <Cpu size={14} className="text-rose-400" /> Neural Layer (ML)
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Deep learning models process raw sensor data to output probabilistic predicates like <code className="text-rose-300">p_attack(Z)</code>. These represent learned uncertainty from historical data.
+          </p>
+        </div>
+        <div className="flex items-center justify-center">
+          <ChevronRight className="text-slate-700 hidden md:block" />
+          <ChevronDown className="text-slate-700 md:hidden" />
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <Shield size={14} className="text-emerald-400" /> Symbolic Layer (AR)
+          </div>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            TS-PHOL logic rules compose ML signals into high-assurance decisions. The engine enforces <code className="text-emerald-300">PTIME</code> tractability and machine-checkable proofs.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const TurnChangeReport: React.FC<{ report: TurnReport | null }> = ({ report }) => {
+  if (!report) return null;
+  return (
+    <motion.div 
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6"
+    >
+      <h4 className="text-[10px] font-bold text-amber-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+        <Activity size={14} /> Turn {report.turn} Intelligence Update
+      </h4>
+      <div className="space-y-2">
+        {report.changes.length > 0 ? report.changes.map((change, i) => (
+          <div key={i} className="flex items-start gap-3 text-[11px] text-slate-300">
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0",
+              change.type === 'reinforcement' ? "bg-rose-500" : change.type === 'attrition' ? "bg-indigo-500" : "bg-amber-500"
+            )} />
+            <p><span className="font-bold text-white">{change.zoneName}:</span> {change.description}</p>
+          </div>
+        )) : (
+          <p className="text-[11px] text-slate-500 italic">No significant tactical shifts detected this turn.</p>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+const RoundSummaryModal: React.FC<{ report: TurnReport | null, onClose: () => void }> = ({ report, onClose }) => {
+  if (!report) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 p-6">
+          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
+            <X size={24} />
+          </button>
+        </div>
+        
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
+            <Trophy size={32} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-white">Round {report.turn} Summary</h2>
+            <p className="text-slate-400 text-sm">{report.summary}</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+          {report.changes.map((change, i) => (
+            <div key={i} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 flex gap-4">
+              <div className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                change.type === 'reinforcement' ? "bg-rose-500/20 text-rose-400" : 
+                change.type === 'attrition' ? "bg-indigo-500/20 text-indigo-400" : 
+                change.type === 'combat' ? "bg-amber-500/20 text-amber-400" : "bg-slate-500/20 text-slate-400"
+              )}>
+                {change.type === 'reinforcement' ? <Flame size={20} /> : 
+                 change.type === 'attrition' ? <Shield size={20} /> : 
+                 change.type === 'combat' ? <Target size={20} /> : <Info size={20} />}
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">{change.zoneName}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">({change.zoneId})</span>
+                </div>
+                <p className="text-sm text-slate-300 mb-1">{change.description}</p>
+                {change.impact && (
+                  <p className="text-[11px] text-indigo-400 font-medium italic">Impact: {change.impact}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button 
+          onClick={onClose}
+          className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
+        >
+          Continue to Turn {report.turn + 1} <ChevronRight size={18} />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const MLSignalsEditor: React.FC<{ zones: ZoneState[], onUpdate: (id: string, p_attack: number, p_success: number) => void }> = ({ zones, onUpdate }) => (
+  <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {zones.map(z => (
+        <div key={z.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white uppercase tracking-wider">{z.name}</span>
+            <span className="text-[10px] font-mono text-slate-500">{z.id}</span>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] uppercase font-bold">
+                <span className="text-rose-400">p_attack</span>
+                <span className="text-slate-400">{(z.p_attack * 100).toFixed(0)}%</span>
+              </div>
+              <input 
+                type="range" min="0" max="1" step="0.01" 
+                value={z.p_attack} 
+                onChange={e => onUpdate(z.id, parseFloat(e.target.value), z.p_success)}
+                className="w-full accent-rose-500"
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] uppercase font-bold">
+                <span className="text-emerald-400">p_success</span>
+                <span className="text-slate-400">{(z.p_success * 100).toFixed(0)}%</span>
+              </div>
+              <input 
+                type="range" min="0" max="1" step="0.01" 
+                value={z.p_success} 
+                onChange={e => onUpdate(z.id, z.p_attack, parseFloat(e.target.value))}
+                className="w-full accent-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const HumanCommander: React.FC<{ 
+  zones: ZoneState[], 
+  onDecision: (action: string, zoneId: string) => void,
+  currentDecision: { action: string, zone: string } | null
+}> = ({ zones, onDecision, currentDecision }) => {
+  const [selectedZone, setSelectedZone] = useState<string>(zones[0]?.id || '');
+  const [selectedAction, setSelectedAction] = useState<string>('Defend');
+
+  return (
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400">
+          <User size={24} />
+        </div>
+        <div>
+          <h3 className="text-sm font-bold text-white">Human Commander</h3>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest">Manual Strategic Input</p>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Zone</label>
+            <select 
+              value={selectedZone}
+              onChange={(e) => setSelectedZone(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+            >
+              {zones.map(z => (
+                <option key={z.id} value={z.id}>{z.name} ({z.id})</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Action</label>
+            <div className="flex gap-2">
+              {['Attack', 'Defend', 'Reinforce', 'Hold'].map(action => (
+                <button
+                  key={action}
+                  onClick={() => setSelectedAction(action)}
+                  className={cn(
+                    "flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all",
+                    selectedAction === action ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  )}
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <button 
+          onClick={() => onDecision(selectedAction, selectedZone)}
+          disabled={!!currentDecision}
+          className={cn(
+            "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+            currentDecision 
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default" 
+              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+          )}
+        >
+          {currentDecision ? (
+            <><CheckCircle2 size={16} /> Order Confirmed</>
+          ) : (
+            <><Target size={16} /> Commit Strategy</>
+          )}
+        </button>
+
+        {currentDecision && (
+          <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800 flex items-center justify-between">
+            <span className="text-[10px] text-slate-500 uppercase font-mono">Current Order:</span>
+            <span className="text-[10px] font-bold text-indigo-400 uppercase">
+              {currentDecision.action} @ {zones.find(z => z.id === currentDecision.zone)?.name}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const InteractiveProof: React.FC<{ fact: GroundedFact | null, zones: ZoneState[], onHighlight: (zoneId: string | null) => void }> = ({ fact, zones, onHighlight }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const resolveName = (arg: string) => {
+    const zone = zones.find(z => z.id === arg);
+    return zone ? zone.name : arg;
+  };
 
   const toggle = (id: string) => {
     const next = new Set(expanded);
@@ -90,7 +347,7 @@ const InteractiveProof: React.FC<{ fact: GroundedFact | null, onHighlight: (zone
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-bold text-indigo-400">{f.predicate}</span>
-              <span className="text-[10px] font-mono text-slate-500">({f.args.join(', ')})</span>
+              <span className="text-[10px] font-mono text-slate-500">({f.args.map(resolveName).join(', ')})</span>
               <span className={cn(
                 "text-[10px] font-mono px-1.5 py-0.5 rounded",
                 f.probability > 0.7 ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
@@ -182,8 +439,10 @@ export default function App() {
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,
+    turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
-    runInference
+    runInference,
+    updateZoneML
   } = useInference();
 
   // --- State ---
@@ -199,6 +458,7 @@ export default function App() {
   const [humanDecision, setHumanDecision] = useState<{ action: string, zone: string } | null>(null);
   const [aiDecision, setAiDecision] = useState<{ action: string, zone: string } | null>(null);
   const [winRateData, setWinRateData] = useState<{ threshold: number, winRate: number }[]>([]);
+  const [showRoundSummary, setShowRoundSummary] = useState(false);
 
   // Rule Editor State
   const [isAddingRule, setIsAddingRule] = useState(false);
@@ -299,7 +559,7 @@ export default function App() {
       let wins = 0;
       for (let i = 0; i < 20; i++) {
         const testZones = initZones(4);
-        const engine = new (require('./engine/tsphol').TSPHOL_Engine)(testZones, rules);
+        const engine = new TSPHOL_Engine(testZones, rules);
         const { facts } = engine.runInference(t);
         const decisions = facts.filter((f: any) => f.predicate === 'Execute');
         if (decisions.length > 0) wins++;
@@ -308,6 +568,11 @@ export default function App() {
     }
     setWinRateData(results);
     addLog("Phase 2 Simulation complete.");
+  };
+
+  const handleAdvanceTurn = () => {
+    advanceTurn();
+    setShowRoundSummary(true);
   };
 
   // --- Render Helpers ---
@@ -323,6 +588,9 @@ export default function App() {
               icon={<Target size={20} />}
             />
             
+            <AR_ML_Explainer />
+            <TurnChangeReport report={lastTurnReport} />
+
             <div className="flex items-center gap-4 mb-4">
               <div className="flex-1 flex items-center gap-2 bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2">
                 <span className="text-[10px] font-mono text-slate-500 uppercase">Seed:</span>
@@ -351,44 +619,11 @@ export default function App() {
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-indigo-400">
-                  <User size={16} /> Human Commander
-                </h3>
-                {gamePhase === 'setup' || gamePhase === 'human_turn' ? (
-                  <div className="space-y-4">
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Analyze the frontier. Where will you commit your forces?
-                    </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {zones.slice(0, 4).map(z => (
-                        <div key={z.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl space-y-3">
-                          <div className="text-[10px] font-bold text-white uppercase">{z.name}</div>
-                          <div className="flex flex-col gap-1">
-                            <button 
-                              onClick={() => handleHumanDecision('Defend', z.id)}
-                              className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold rounded transition-colors"
-                            >
-                              DEFEND
-                            </button>
-                            <button 
-                              onClick={() => handleHumanDecision('Attack', z.id)}
-                              className="w-full py-1.5 bg-rose-600 hover:bg-rose-500 text-[10px] font-bold rounded transition-colors"
-                            >
-                              ATTACK
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-40 space-y-2">
-                    <CheckCircle2 className="text-emerald-500" size={32} />
-                    <span className="text-xs font-mono text-slate-400">Decision Locked: {humanDecision?.action} @ {zones.find(z => z.id === humanDecision?.zone)?.name}</span>
-                  </div>
-                )}
-              </div>
+              <HumanCommander 
+                zones={zones} 
+                onDecision={handleHumanDecision} 
+                currentDecision={humanDecision} 
+              />
 
               <DecisionCard 
                 decision={aiDecision} 
@@ -404,10 +639,10 @@ export default function App() {
                   <Trophy size={16} className="text-amber-400" /> Scoreboard & Outcomes
                 </h3>
                 <button 
-                  onClick={() => { setGamePhase('setup'); setHumanDecision(null); setAiDecision(null); initZones(numZones); }}
+                  onClick={() => { setGamePhase('setup'); setHumanDecision(null); setAiDecision(null); resetSession(); }}
                   className="text-[10px] font-mono text-slate-500 hover:text-white flex items-center gap-1"
                 >
-                  <RefreshCw size={12} /> RESET ROUND
+                  <RefreshCw size={12} /> RESET SESSION
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-8">
@@ -445,42 +680,16 @@ export default function App() {
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <TabHeader 
-              title="Neural Layer Predictions" 
-              description="Low-level ML models output probabilistic signals. These are the 'raw senses' of the system before logical composition." 
-              icon={<Cpu size={20} />}
+              title="ML Perception Signals" 
+              description="These signals are generated by deep neural networks analyzing raw battlefield data. They serve as the probabilistic inputs for the TS-PHOL engine." 
+              icon={<BrainCircuit size={20} />}
             />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {zones.map(z => (
-                <div key={z.id} className={cn(
-                  "p-4 border rounded-xl transition-all",
-                  highlightedZone === z.id ? "bg-indigo-500/10 border-indigo-500/50 scale-[1.01]" : "bg-slate-800/30 border-slate-700"
-                )}>
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-bold text-white">{z.name}</span>
-                    <span className="text-[10px] font-mono text-slate-500">{z.id}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-8">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[9px] font-mono text-slate-400 uppercase">
-                        <span>Prob. Attack</span>
-                        <span>{(z.p_attack * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                        <div className="h-full bg-rose-500" style={{ width: `${z.p_attack * 100}%` }} />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-[9px] font-mono text-slate-400 uppercase">
-                        <span>Prob. Success</span>
-                        <span>{(z.p_success * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="h-1.5 bg-slate-900 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: `${z.p_success * 100}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-bold text-white">Signal Calibration</h3>
+                <div className="text-[10px] font-mono text-slate-500 uppercase">Editable Parameters</div>
+              </div>
+              <MLSignalsEditor zones={zones} onUpdate={updateZoneML} />
             </div>
           </div>
         );
@@ -515,9 +724,14 @@ export default function App() {
                           <span className="text-[9px] px-2 py-0.5 rounded bg-slate-700 text-slate-400 font-mono">STRATUM {rule.stratum}</span>
                         </div>
                       </div>
-                      <div className="text-sm font-mono text-white">
+                      <div className="text-sm font-mono text-white mb-2">
                         {rule.head} <span className="text-slate-500 mx-2">←</span> {rule.body.join(', ')}
                       </div>
+                      {rule.description && (
+                        <p className="text-[11px] text-slate-500 italic leading-relaxed border-t border-slate-800/50 pt-2">
+                          {rule.description}
+                        </p>
+                      )}
                     </div>
                   ))}
                   {isAddingRule ? (
@@ -606,36 +820,36 @@ export default function App() {
         return (
           <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="col-span-12 lg:col-span-4 space-y-6">
-              <TabHeader 
-                title="Logical Inference" 
-                description="The engine grounds abstract rules into concrete facts. Observe the hierarchical stratification of reasoning." 
-                icon={<Terminal size={20} />}
-              />
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-6 text-white">
-                  Inferred Predicates
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-[600px] flex flex-col">
+                <h3 className="text-sm font-bold flex items-center gap-2 mb-6 text-indigo-400">
+                  <Terminal size={16} /> Inferred Predicates
                 </h3>
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                  {STRATA_LABELS.map((label, s) => {
-                    const stratumFacts = inferredFacts.filter(f => f.stratum === s);
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
+                  {STRATA_LABELS.map((label, stratum) => {
+                    const stratumFacts = inferredFacts.filter(f => f.stratum === stratum);
                     if (stratumFacts.length === 0) return null;
                     return (
-                      <div key={s} className="space-y-2">
-                        <div className="text-[9px] font-mono text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-1">{label}</div>
-                        <div className="grid grid-cols-1 gap-1">
-                          {stratumFacts.map((f, i) => (
-                            <button 
-                              key={i}
-                              onClick={() => { setSelectedFact(f); setActiveTab('proof'); }}
-                              className="text-left p-2 bg-slate-800/30 border border-slate-700 rounded-lg hover:border-indigo-500/50 transition-all flex items-center justify-between group"
+                      <div key={stratum} className="space-y-3">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-1">
+                          {label}
+                        </div>
+                        <div className="space-y-2">
+                          {stratumFacts.map((f) => (
+                            <button
+                              key={f.id}
+                              onClick={() => setSelectedFact(f)}
+                              className={cn(
+                                "w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left group",
+                                selectedFact?.id === f.id ? "bg-indigo-600/20 border-indigo-500" : "bg-slate-800/30 border-slate-700/50 hover:border-slate-600"
+                              )}
                             >
                               <div className="text-[10px] font-mono">
                                 <span className="text-slate-200">{f.predicate}</span>
-                                <span className="text-slate-500">({f.args.join(',')})</span>
+                                <span className="text-slate-500">({f.args.map(arg => zones.find(z => z.id === arg)?.name || arg).join(',')})</span>
                               </div>
                               <span className={cn(
-                                "text-[9px] font-mono",
-                                f.probability > 0.7 ? "text-emerald-400" : f.probability > 0.4 ? "text-amber-400" : "text-rose-400"
+                                "text-[9px] font-mono px-1.5 py-0.5 rounded",
+                                f.probability > 0.7 ? "bg-emerald-500/10 text-emerald-400" : f.probability > 0.4 ? "bg-amber-500/10 text-amber-400" : "bg-rose-500/10 text-rose-400"
                               )}>
                                 {(f.probability * 100).toFixed(0)}%
                               </span>
@@ -669,11 +883,22 @@ export default function App() {
                 </div>
                 
                 <div className="mt-8 p-6 bg-indigo-600/10 border border-indigo-500/30 rounded-2xl">
-                  <h4 className="text-xs font-bold text-indigo-400 mb-4 uppercase tracking-widest">What-If Sandbox</h4>
+                  <div className="flex items-start gap-4 mb-6">
+                    <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center text-indigo-400 shrink-0">
+                      <Zap size={20} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest">What-If Sandbox</h4>
+                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                        The <strong>20-Game Win Rate Simulation</strong> tests the robustness of the current logic rules across 20 randomized scenarios. It measures how often the AI's top-ranked decision leads to a tactical advantage compared to a baseline random strategy.
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="space-y-6">
                     <div className="space-y-3">
                       <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                        <span>Inference Threshold (p_attack)</span>
+                        <span>Inference Sensitivity (p_attack threshold)</span>
                         <span className="text-white font-bold">{pAttackThreshold.toFixed(1)}</span>
                       </div>
                       <input 
@@ -682,25 +907,32 @@ export default function App() {
                         onChange={(e) => setPAttackThreshold(parseFloat(e.target.value))}
                         className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                       />
-                      <p className="text-[9px] text-slate-500 italic">Adjusting this threshold changes how aggressively the AI classifies sectors as 'vulnerable'.</p>
+                      <p className="text-[9px] text-slate-500 italic">Lowering the threshold makes the AI more 'paranoid', triggering defensive rules even with weak ML signals.</p>
                     </div>
                     <button 
                       onClick={runPhase2Sim}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-all"
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2"
                     >
-                      RUN 20-GAME WIN RATE SIMULATION
+                      <RefreshCw size={14} /> RUN MONTE CARLO ROBUSTNESS SIMULATION
                     </button>
                     {winRateData.length > 0 && (
-                      <div className="h-40 w-full mt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={winRateData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                            <XAxis dataKey="threshold" stroke="#475569" fontSize={10} />
-                            <YAxis stroke="#475569" fontSize={10} />
-                            <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }} />
-                            <Bar dataKey="winRate" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
+                      <div className="space-y-4">
+                        <div className="h-48 w-full mt-4">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={winRateData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                              <XAxis dataKey="threshold" stroke="#475569" fontSize={10} label={{ value: 'Threshold', position: 'insideBottom', offset: -5, fontSize: 10, fill: '#475569' }} />
+                              <YAxis stroke="#475569" fontSize={10} label={{ value: 'Win %', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#475569' }} />
+                              <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }} />
+                              <Bar dataKey="winRate" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                          <p className="text-[10px] text-slate-500 leading-relaxed">
+                            <span className="text-indigo-400 font-bold">Analysis:</span> The chart above shows the expected win rate at different sensitivity levels. A peak indicates the 'Optimal Strategic Balance' for the current rule set.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -718,7 +950,7 @@ export default function App() {
               icon={<Network size={20} />}
             />
             <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-[600px]">
-              <InteractiveProof fact={selectedFact} onHighlight={setHighlightedZone} />
+              <InteractiveProof fact={selectedFact} zones={zones} onHighlight={setHighlightedZone} />
             </div>
           </div>
         );
@@ -801,6 +1033,13 @@ export default function App() {
     <div className="min-h-screen bg-[#050505] text-slate-200 font-sans selection:bg-indigo-500/30">
       <Onboarding />
       
+      {showRoundSummary && (
+        <RoundSummaryModal 
+          report={lastTurnReport} 
+          onClose={() => setShowRoundSummary(false)} 
+        />
+      )}
+
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
@@ -817,6 +1056,10 @@ export default function App() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-8">
               <div className="flex flex-col items-end">
+                <span className="text-[9px] font-mono text-slate-500 uppercase">Turn</span>
+                <span className="text-sm font-bold text-white">{turn}</span>
+              </div>
+              <div className="flex flex-col items-end">
                 <span className="text-[9px] font-mono text-slate-500 uppercase">Human Score</span>
                 <span className="text-sm font-bold text-indigo-400">{humanScore}</span>
               </div>
@@ -825,19 +1068,30 @@ export default function App() {
                 <span className="text-sm font-bold text-emerald-400">{aiScore}</span>
               </div>
             </div>
-            <button 
-              onClick={handleInference}
-              disabled={isInferring}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
-                isInferring 
-                  ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
-                  : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
+            <div className="flex gap-2">
+              <button 
+                onClick={handleInference}
+                disabled={isInferring}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
+                  isInferring 
+                    ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
+                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
+                )}
+              >
+                {isInferring ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
+                <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
+              </button>
+              {gamePhase === 'result' && (
+                <button 
+                  onClick={handleAdvanceTurn}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <ChevronRight size={18} />
+                  <span>Next Turn</span>
+                </button>
               )}
-            >
-              {isInferring ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
-              <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
-            </button>
+            </div>
           </div>
         </div>
       </header>

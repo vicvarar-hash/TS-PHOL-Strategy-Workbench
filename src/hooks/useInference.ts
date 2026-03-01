@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { ZoneState, LogicRule, GroundedFact, ValidationResult, ScalingMetric } from '../types';
+import { ZoneState, LogicRule, GroundedFact, ValidationResult, ScalingMetric, TurnReport } from '../types';
 import { TSPHOL_Engine, ZONE_NAMES, DEFAULT_RULES } from '../engine/tsphol';
 
 // Simple seeded random for reproducibility
@@ -28,10 +28,12 @@ export function useInference() {
   const [currentStep, setCurrentStep] = useState('state');
   const [pAttackThreshold, setPAttackThreshold] = useState(0.5);
   const [seed, setSeed] = useState<string>(Math.random().toString(36).substring(7));
+  const [turn, setTurn] = useState(1);
+  const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
 
   const initZones = useCallback((n: number, customSeed?: string) => {
     const activeSeed = customSeed || seed;
-    const rngSeed = parseInt(activeSeed, 36) || 12345;
+    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn; // Add turn to seed for variability
     const rng = mulberry32(rngSeed);
 
     const newZones: ZoneState[] = Array.from({ length: n }, (_, i) => ({
@@ -47,7 +49,88 @@ export function useInference() {
     }));
     setZones(newZones);
     return newZones;
-  }, [seed]);
+  }, [seed, turn]);
+
+  const advanceTurn = useCallback((humanAction?: { action: string, zone: string }, aiAction?: { action: string, zone: string }) => {
+    const rng = mulberry32(Date.now());
+    const report: TurnReport = { 
+      turn: turn, 
+      changes: [],
+      summary: `End of Strategic Turn ${turn}. Tactical movements processed.`
+    };
+    
+    // Process combat if both made decisions
+    if (humanAction && aiAction) {
+      if (humanAction.zone === aiAction.zone) {
+        report.changes.push({
+          zoneId: humanAction.zone,
+          zoneName: zones.find(z => z.id === humanAction.zone)?.name || humanAction.zone,
+          type: 'combat',
+          description: `Direct engagement at ${humanAction.zone}.`,
+          impact: "High attrition for both sides."
+        });
+        report.victor = 'draw';
+      } else {
+        report.summary += ` Human focused on ${humanAction.zone}, AI focused on ${aiAction.zone}.`;
+      }
+    }
+
+    const nextZones = zones.map(z => {
+      const roll = rng();
+      let newZ = { ...z };
+      
+      if (roll < 0.15) {
+        const amount = Math.floor(rng() * 5) + 1;
+        newZ.enemy += amount;
+        report.changes.push({ 
+          zoneId: z.id, 
+          zoneName: z.name, 
+          type: 'reinforcement', 
+          description: `Enemy reinforcements (+${amount}) detected.`,
+          impact: "Increased risk level."
+        });
+      } else if (roll < 0.3) {
+        const amount = Math.floor(rng() * 3) + 1;
+        newZ.ours = Math.max(0, newZ.ours - amount);
+        report.changes.push({ 
+          zoneId: z.id, 
+          zoneName: z.name, 
+          type: 'attrition', 
+          description: `Allied attrition (-${amount}) reported.`,
+          impact: "Reduced defensive capability."
+        });
+      } else if (roll < 0.4) {
+        newZ.fog = !newZ.fog;
+        report.changes.push({ 
+          zoneId: z.id, 
+          zoneName: z.name, 
+          type: 'intel', 
+          description: newZ.fog ? "Satellite link lost. Fog of war active." : "Intel clear. Fog of war lifted.",
+          impact: "Intelligence reliability shifted."
+        });
+      }
+      
+      // Update ML signals slightly
+      newZ.p_attack = Math.max(0, Math.min(1, newZ.p_attack + (rng() - 0.5) * 0.1));
+      newZ.p_success = Math.max(0, Math.min(1, newZ.p_success + (rng() - 0.5) * 0.1));
+      
+      return newZ;
+    });
+
+    setZones(nextZones);
+    setTurn(prev => prev + 1);
+    setLastTurnReport(report);
+  }, [zones, turn]);
+
+  const updateZoneML = useCallback((zoneId: string, p_attack: number, p_success: number) => {
+    setZones(prev => prev.map(z => z.id === zoneId ? { ...z, p_attack, p_success } : z));
+  }, []);
+
+  const resetSession = useCallback(() => {
+    setTurn(1);
+    setLastTurnReport(null);
+    initZones(numZones);
+  }, [numZones, initZones]);
 
   useEffect(() => {
     initZones(numZones);
@@ -114,7 +197,9 @@ export function useInference() {
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,
+    turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
-    runInference
+    runInference,
+    updateZoneML
   };
 }

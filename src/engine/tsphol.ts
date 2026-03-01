@@ -24,12 +24,30 @@ export const STRATA_LABELS = [
 ];
 
 export const DEFAULT_RULES: LogicRule[] = [
-  { id: 'R1', head: 'Vulnerable(z)', body: ['EnemyPresence(z)', 'LowDefense(z)'], probability: 0.9, stratum: 1 },
-  { id: 'R2', head: 'HighValue(z)', body: ['StrategicValue(z)', 'SupplyRich(z)'], probability: 0.85, stratum: 1 },
-  { id: 'R3', head: 'Defend(z)', body: ['Vulnerable(z)', 'HighValue(z)'], probability: 0.95, stratum: 2 },
-  { id: 'R4', head: 'Attack(z)', body: ['EnemyPresence(z)', 'p_success_high(z)'], probability: 0.8, stratum: 2 },
-  { id: 'R5', head: 'Execute(Defend, z)', body: ['Defend(z)', 'SupplyAvailable(z)'], probability: 0.99, stratum: 3 },
-  { id: 'R6', head: 'Execute(Attack, z)', body: ['Attack(z)', 'NoFog(z)'], probability: 0.9, stratum: 3 },
+  { 
+    id: 'R1', head: 'Vulnerable(z)', body: ['EnemyPresence(z)', 'LowDefense(z)'], probability: 0.9, stratum: 1,
+    description: "A zone is vulnerable if there is enemy presence and allied defense is insufficient."
+  },
+  { 
+    id: 'R2', head: 'HighValue(z)', body: ['StrategicValue(z)', 'SupplyRich(z)'], probability: 0.85, stratum: 1,
+    description: "A zone is high value if it has high strategic importance and abundant supplies."
+  },
+  { 
+    id: 'R3', head: 'Defend(z)', body: ['Vulnerable(z)', 'HighValue(z)'], probability: 0.95, stratum: 2,
+    description: "Recommend defense if a zone is both vulnerable and high value."
+  },
+  { 
+    id: 'R4', head: 'Attack(z)', body: ['EnemyPresence(z)', 'p_success_high(z)'], probability: 0.8, stratum: 2,
+    description: "Recommend attack if enemy is present and ML models predict a high probability of success."
+  },
+  { 
+    id: 'R5', head: 'Execute(Defend, z)', body: ['Defend(z)', 'SupplyAvailable(z)'], probability: 0.99, stratum: 3,
+    description: "Execute defense orders if recommended and local supply lines are operational."
+  },
+  { 
+    id: 'R6', head: 'Execute(Attack, z)', body: ['Attack(z)', 'NoFog(z)'], probability: 0.9, stratum: 3,
+    description: "Execute attack orders if recommended and there is no fog of war obscuring the target."
+  },
 ];
 
 export class TSPHOL_Engine {

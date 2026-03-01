@@ -21,6 +21,7 @@ export interface LogicRule {
   body: string[];
   probability: number;
   stratum: number; // 1: Risk, 2: Candidate, 3: Decision
+  description?: string;
 }
 
 export interface GroundedFact {
@@ -36,6 +37,19 @@ export interface GroundedFact {
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+}
+
+export interface TurnReport {
+  turn: number;
+  changes: {
+    zoneId: string;
+    zoneName: string;
+    type: 'reinforcement' | 'attrition' | 'intel' | 'combat';
+    description: string;
+    impact?: string;
+  }[];
+  summary: string;
+  victor?: 'human' | 'ai' | 'draw';
 }
 
 export interface ScalingMetric {
