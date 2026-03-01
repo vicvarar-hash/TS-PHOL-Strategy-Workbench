@@ -142,34 +142,55 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
               </div>
             ) : (
               <>
-                <div className="relative mb-1">
+                <div className="relative mb-0.5">
                   <div className={cn(
-                    "w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all duration-300 group-hover:rotate-12",
+                    "w-6 h-6 rounded-md border flex items-center justify-center transition-all duration-300 group-hover:rotate-12",
                     z.ours > z.enemy ? "border-indigo-500/30 bg-indigo-500/5 text-indigo-400" : "border-rose-500/30 bg-rose-500/5 text-rose-400"
                   )}>
                     {getTerrainIcon(z.id)}
                   </div>
                   {z.fog && (
-                    <div className="absolute -top-1.5 -right-1.5 bg-slate-950 rounded-full p-0.5 border border-slate-800 shadow-lg">
-                      <Eye size={8} className="text-slate-500" />
+                    <div className="absolute -top-1 -right-1 bg-slate-950 rounded-full p-0.5 border border-slate-800 shadow-lg">
+                      <Eye size={6} className="text-slate-500" />
                     </div>
                   )}
                 </div>
                 
-                <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center px-1">{z.id}</div>
-                <div className="text-[6px] text-slate-500 uppercase tracking-tighter truncate w-full text-center px-1">{z.name}</div>
+                <div className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center">{z.id}</div>
                 
-                {/* Strength Indicators */}
-                <div className="mt-1 flex gap-1">
-                  <div className="flex flex-col items-center">
-                    <div className="w-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="w-full bg-indigo-500" style={{ height: `${Math.min(100, z.ours * 5)}%` }} />
-                    </div>
+                <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 w-full mt-1">
+                  <div className="flex items-center justify-between bg-indigo-500/10 rounded px-0.5 py-0.25">
+                    <span className="text-[5px] text-indigo-300 font-bold">A</span>
+                    <span className="text-[6px] font-mono text-white">{z.ours}</span>
                   </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="w-full bg-rose-500" style={{ height: `${Math.min(100, z.enemy * 5)}%` }} />
+                  <div className="flex items-center justify-between bg-rose-500/10 rounded px-0.5 py-0.25">
+                    <span className="text-[5px] text-rose-300 font-bold">E</span>
+                    <span className="text-[6px] font-mono text-white">{z.enemy}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-amber-500/10 rounded px-0.5 py-0.25">
+                    <span className="text-[5px] text-amber-300 font-bold">S</span>
+                    <span className="text-[6px] font-mono text-white">{z.supply}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-emerald-500/10 rounded px-0.5 py-0.25">
+                    <span className="text-[5px] text-emerald-300 font-bold">V</span>
+                    <span className="text-[6px] font-mono text-white">{z.value}</span>
+                  </div>
+                </div>
+
+                <div className="w-full mt-1 space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[5px] text-slate-500 uppercase font-bold">Atk</span>
+                    <div className="flex-1 h-0.5 bg-slate-800 rounded-full mx-1 overflow-hidden">
+                      <div className="h-full bg-indigo-400" style={{ width: `${z.p_attack * 100}%` }} />
                     </div>
+                    <span className="text-[5px] font-mono text-slate-400">{(z.p_attack * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[5px] text-slate-500 uppercase font-bold">Suc</span>
+                    <div className="flex-1 h-0.5 bg-slate-800 rounded-full mx-1 overflow-hidden">
+                      <div className="h-full bg-emerald-400" style={{ width: `${z.p_success * 100}%` }} />
+                    </div>
+                    <span className="text-[5px] font-mono text-slate-400">{(z.p_success * 100).toFixed(0)}%</span>
                   </div>
                 </div>
 

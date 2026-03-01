@@ -720,7 +720,13 @@ const HumanCommander: React.FC<{
   );
 };
 
-const InteractiveProof: React.FC<{ fact: GroundedFact | null, zones: ZoneState[], onHighlight: (zoneId: string | null) => void }> = ({ fact, zones, onHighlight }) => {
+const InteractiveProof: React.FC<{ 
+  fact: GroundedFact | null, 
+  zones: ZoneState[], 
+  onHighlight: (zoneId: string | null) => void,
+  onSelectFact: (f: GroundedFact) => void,
+  selectedFactId?: string
+}> = ({ fact, zones, onHighlight, onSelectFact, selectedFactId }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const resolveName = (arg: string) => {
@@ -738,15 +744,20 @@ const InteractiveProof: React.FC<{ fact: GroundedFact | null, zones: ZoneState[]
   const renderNode = (f: GroundedFact, depth: number = 0) => {
     const isExpanded = expanded.has(f.id);
     const hasChildren = f.childFacts.length > 0;
+    const isSelected = f.id === selectedFactId;
 
     return (
       <div key={f.id} className="ml-4 border-l border-slate-800 pl-4 py-1">
         <div 
           className={cn(
             "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer group",
-            hasChildren ? "hover:bg-slate-800/50" : "cursor-default"
+            isSelected ? "bg-indigo-500/20 ring-1 ring-indigo-500/50" : "hover:bg-slate-800/50"
           )}
-          onClick={() => hasChildren && toggle(f.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelectFact(f);
+            if (hasChildren) toggle(f.id);
+          }}
           onMouseEnter={() => f.args.length > 0 && onHighlight(f.args[f.args.length - 1])}
           onMouseLeave={() => onHighlight(null)}
         >
@@ -867,7 +878,7 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
 
   // Game Mode State
-  const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
+  const [gamePhase, setGamePhase] = useState<GamePhase>('awaiting_human');
   const [humanScore, setHumanScore] = useState(0);
   const [aiScore, setAiScore] = useState(0);
   const [humanDecision, setHumanDecision] = useState<{ action: string, zone: string } | null>(null);
@@ -892,6 +903,7 @@ export default function App() {
       addLog("Cannot run inference: Validation errors detected.");
       return;
     }
+    setGamePhase('ai_evaluating');
     const result = await runInference();
     if (result) {
       const { facts, bestDecision } = result;
@@ -899,7 +911,11 @@ export default function App() {
       if (bestDecision) {
         setAiDecision({ action: bestDecision.args[0], zone: bestDecision.args[1] });
       }
+      setGamePhase('turn_result');
+      setIsStale(false);
       addLog(`Inference complete. ${facts.length} facts generated.`);
+    } else {
+      setGamePhase('awaiting_human');
     }
   };
 
@@ -910,35 +926,7 @@ export default function App() {
 
   const handleHumanDecision = (action: string, zoneId: string) => {
     setHumanDecision({ action, zone: zoneId });
-    setGamePhase('ai_turn');
-    runInference().then((result) => {
-      if (result) {
-        const { bestDecision } = result;
-        if (bestDecision) {
-          setAiDecision({ action: bestDecision.args[0], zone: bestDecision.args[1] });
-        }
-        setGamePhase('result');
-        calculateScores(action, zoneId, bestDecision);
-      }
-    });
-  };
-
-  const calculateScores = (hAction: string, hZone: string, aiBest: any) => {
-    const zone = zones.find(z => z.id === hZone)!;
-    let hPoints = 0;
-    if (hAction === 'Defend' && zone.enemy > 10) hPoints += 2;
-    else if (hAction === 'Attack' && zone.p_success > 0.7) hPoints += 3;
-    else hPoints -= 1;
-    setHumanScore(prev => prev + hPoints);
-
-    if (aiBest) {
-      const aiZone = zones.find(z => z.id === aiBest.args[1])!;
-      let aiPoints = 0;
-      if (aiBest.args[0] === 'Defend' && aiZone.enemy > 10) aiPoints += 2;
-      else if (aiBest.args[0] === 'Attack' && aiZone.p_success > 0.7) aiPoints += 3;
-      else aiPoints -= 1;
-      setAiScore(prev => prev + aiPoints);
-    }
+    addLog(`Human order set: ${action} in ${zoneId}.`);
   };
 
   const saveScenario = () => {
@@ -989,13 +977,28 @@ export default function App() {
   };
 
   const handleAdvanceTurn = () => {
+    if (!humanDecision || !aiDecision) return;
+    
+    setGamePhase('ready_next');
+    const report = advanceTurn(humanDecision, aiDecision);
+    
+    // Update scores
+    if (report.victor === 'human') setHumanScore(s => s + 1);
+    else if (report.victor === 'ai') setAiScore(s => s + 1);
+    else if (report.victor === 'draw') {
+      setHumanScore(s => s + 1);
+      setAiScore(s => s + 1);
+    }
+    
+    setShowRoundSummary(true);
+    
+    // Reset for next turn
     setHumanDecision(null);
     setAiDecision(null);
     setInferredFacts([]);
     setSelectedFact(null);
-    advanceTurn();
-    setShowRoundSummary(true);
-    setGamePhase('human_turn');
+    setHighlightedZone(null);
+    setGamePhase('awaiting_human');
   };
 
   // --- Render Helpers ---
@@ -1007,10 +1010,52 @@ export default function App() {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <TabHeader 
               title="Operational Theater" 
-              description="Configure the tactical environment. Edit zone parameters directly to see how the AI adapts its reasoning." 
+              description="Configure the tactical environment and issue orders. The TS-PHOL engine will evaluate your strategy against its own logical recommendations." 
               icon={<Target size={20} />}
             />
             
+            <div className="flex items-center justify-between mb-2 px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-2xl">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "w-2.5 h-2.5 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.5)]",
+                    gamePhase === 'awaiting_human' ? "bg-amber-500 shadow-amber-500/50" :
+                    gamePhase === 'ai_evaluating' ? "bg-indigo-500 shadow-indigo-500/50 animate-pulse" :
+                    gamePhase === 'turn_result' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-500"
+                  )} />
+                  <span className="text-[11px] font-bold text-white uppercase tracking-[0.15em]">
+                    {gamePhase === 'awaiting_human' ? 'Awaiting Human Order' :
+                     gamePhase === 'ai_evaluating' ? 'AI Evaluating Strategy' :
+                     gamePhase === 'turn_result' ? 'Turn Result Analyzed' : 'Ready Next Turn'}
+                  </span>
+                </div>
+                <div className="h-4 w-[1px] bg-slate-800" />
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-mono text-slate-500 uppercase">Turn</span>
+                    <span className="text-xs font-bold text-white">{turn}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-mono text-slate-500 uppercase">Human Score</span>
+                    <span className="text-xs font-bold text-indigo-400">{humanScore}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[8px] font-mono text-slate-500 uppercase">AI Score</span>
+                    <span className="text-xs font-bold text-emerald-400">{aiScore}</span>
+                  </div>
+                </div>
+              </div>
+
+              {gamePhase === 'turn_result' && (
+                <button 
+                  onClick={handleAdvanceTurn}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <ChevronRight size={14} /> Next Turn
+                </button>
+              )}
+            </div>
+
             <TurnChangeReport report={lastTurnReport} />
 
             <div className="flex items-center gap-4 mb-4">
@@ -1022,12 +1067,14 @@ export default function App() {
                     value={numZones} 
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="w-24 accent-indigo-500"
+                    disabled={gamePhase !== 'awaiting_human'}
                   />
                   <input 
                     type="number" min="2" max="12"
                     value={numZones} 
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="bg-slate-800 border border-slate-700 text-xs font-mono text-white rounded w-12 text-center"
+                    disabled={gamePhase !== 'awaiting_human'}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -1036,16 +1083,24 @@ export default function App() {
                     value={seed} 
                     onChange={e => setSeed(e.target.value)}
                     className="bg-transparent border-none text-xs font-mono text-white focus:ring-0 w-24"
+                    disabled={gamePhase !== 'awaiting_human'}
                   />
-                  <button onClick={() => initZones(numZones)} className="text-slate-500 hover:text-white transition-colors" title="Regenerate Map"><RefreshCw size={14} /></button>
+                  <button 
+                    onClick={() => initZones(numZones)} 
+                    className="text-slate-500 hover:text-white transition-colors disabled:opacity-30" 
+                    title="Regenerate Map"
+                    disabled={gamePhase !== 'awaiting_human'}
+                  >
+                    <RefreshCw size={14} />
+                  </button>
                 </div>
               </div>
               <div className="flex gap-2">
                 <button onClick={saveScenario} className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all">
-                  <Download size={14} /> Save JSON
+                  <Download size={14} /> Save
                 </button>
                 <label className="flex items-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all cursor-pointer">
-                  <Upload size={14} /> Load JSON
+                  <Upload size={14} /> Load
                   <input type="file" className="hidden" onChange={loadScenario} accept=".json" />
                 </label>
               </div>
@@ -1057,20 +1112,23 @@ export default function App() {
               onEditZone={(updated) => setZones(zones.map(z => z.id === updated.id ? updated : z))} 
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <HumanCommander 
-                zones={zones} 
-                onDecision={handleHumanDecision} 
-                currentDecision={humanDecision} 
-              />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="lg:col-span-4">
+                <HumanCommander 
+                  zones={zones} 
+                  onDecision={handleHumanDecision} 
+                  currentDecision={humanDecision} 
+                />
+              </div>
 
-              <DecisionCard 
-                decision={aiDecision} 
-                zone={zones.find(z => z.id === aiDecision?.zone)} 
-                facts={inferredFacts} 
-                pAttackThreshold={pAttackThreshold}
-                onShowProof={handleShowProof}
-              />
+              <div className="lg:col-span-8">
+                <DecisionCard 
+                  facts={inferredFacts} 
+                  zones={zones}
+                  onShowProof={handleShowProof}
+                  selectedFactId={selectedFact?.id}
+                />
+              </div>
             </div>
           </div>
         );
@@ -1281,6 +1339,8 @@ export default function App() {
                   fact={selectedFact} 
                   zones={zones} 
                   onHighlight={setHighlightedZone} 
+                  onSelectFact={setSelectedFact}
+                  selectedFactId={selectedFact?.id}
                 />
               </div>
             </div>
@@ -1292,19 +1352,6 @@ export default function App() {
             metrics={scalingMetrics} 
             onRunBenchmark={handleRunBenchmark} 
             explanation={scalingExplanation}
-          />
-        );
-      case 'play':
-        return (
-          <PlayModeView 
-            zones={zones}
-            humanDecision={humanDecision}
-            aiDecision={aiDecision}
-            onHumanDecision={handleHumanDecision}
-            humanScore={humanScore}
-            aiScore={aiScore}
-            gamePhase={gamePhase}
-            onReset={() => { setHumanDecision(null); setAiDecision(null); resetSession(); }}
           />
         );
       default:
@@ -1337,20 +1384,6 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-8">
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] font-mono text-slate-500 uppercase">Turn</span>
-                <span className="text-sm font-bold text-white">{turn}</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] font-mono text-slate-500 uppercase">Human Score</span>
-                <span className="text-sm font-bold text-indigo-400">{humanScore}</span>
-              </div>
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] font-mono text-slate-500 uppercase">AI Score</span>
-                <span className="text-sm font-bold text-emerald-400">{aiScore}</span>
-              </div>
-            </div>
             <div className="flex gap-2 items-center">
               {isStale && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg animate-pulse">
@@ -1360,26 +1393,17 @@ export default function App() {
               )}
               <button 
                 onClick={handleInference}
-                disabled={isInferring}
+                disabled={isInferring || gamePhase === 'ai_evaluating'}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
-                  isInferring 
+                  isInferring || gamePhase === 'ai_evaluating'
                     ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
                     : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
                 )}
               >
-                {isInferring ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
-                <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
+                {isInferring || gamePhase === 'ai_evaluating' ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
+                <span>{isInferring || gamePhase === 'ai_evaluating' ? 'Evaluating...' : 'Run Inference'}</span>
               </button>
-              {gamePhase === 'result' && (
-                <button 
-                  onClick={handleAdvanceTurn}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium transition-all shadow-lg shadow-emerald-500/20"
-                >
-                  <ChevronRight size={18} />
-                  <span>Next Turn</span>
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -1439,7 +1463,6 @@ export default function App() {
               { id: 'inference', label: 'Inference', icon: Terminal },
               { id: 'proof', label: 'Proof', icon: Network },
               { id: 'scaling', label: 'Scaling', icon: BarChart3 },
-              { id: 'play', label: 'Play Mode', icon: Trophy },
             ].map(tab => (
               <button
                 key={tab.id}

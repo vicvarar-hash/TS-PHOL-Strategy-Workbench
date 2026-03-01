@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { HelpCircle, ChevronRight, X, Info, Target, Cpu, Play, Network, Shield, RefreshCw } from 'lucide-react';
+import { HelpCircle, ChevronRight, X, Info, Target, Cpu, Play, Network, Shield, RefreshCw, User } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const Onboarding: React.FC = () => {
@@ -15,39 +15,33 @@ export const Onboarding: React.FC = () => {
   const steps = [
     {
       title: "Step 1: Configure Scenario",
-      description: "Set the zone count and seed. This defines the operational theater for the entire simulation.",
+      description: "Set the zone count and seed in the Scenario tab. This defines the operational theater for the simulation.",
       icon: Target,
       color: "text-indigo-400"
     },
     {
-      title: "Step 2: ML Signals",
-      description: "Review and adjust probabilistic predictions from the neural layer for each sector.",
-      icon: Cpu,
-      color: "text-rose-400"
+      title: "Step 2: Issue Orders",
+      description: "Select a zone and action to commit your strategic intent. The AI will evaluate its own best move in parallel.",
+      icon: User,
+      color: "text-amber-400"
     },
     {
-      title: "Step 3: Hypotheses & Validator",
-      description: "Propose new tactical rules and ensure they pass the structural fragment validator for safety.",
-      icon: Shield,
-      color: "text-indigo-400"
-    },
-    {
-      title: "Step 4: Run Inference",
-      description: "Execute the TS-PHOL engine to generate high-assurance decisions from validated rules.",
+      title: "Step 3: Run Inference",
+      description: "Execute the TS-PHOL engine to generate high-assurance decisions and compare them with your orders.",
       icon: Play,
       color: "text-emerald-400"
     },
     {
-      title: "Step 5: Verify Proofs",
+      title: "Step 4: Verify Proofs",
       description: "Inspect the machine-checkable proof artifacts to understand the logical chain behind AI actions.",
       icon: Network,
-      color: "text-amber-400"
+      color: "text-indigo-400"
     },
     {
-      title: "Step 6: Next Turn",
-      description: "Commit your orders and advance the simulation to see the tactical consequences of your decisions.",
+      title: "Step 5: Advance Turn",
+      description: "Commit the turn to see tactical consequences. The simulation updates zone states based on both human and AI actions.",
       icon: RefreshCw,
-      color: "text-indigo-400"
+      color: "text-rose-400"
     }
   ];
 
