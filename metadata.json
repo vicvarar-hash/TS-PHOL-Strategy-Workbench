@@ -1,0 +1,5 @@
+{
+  "name": "TS-PHOL Workbench",
+  "description": "A demonstration platform for Tractable Stratified Probabilistic Higher-Order Logic (TS-PHOL), featuring hierarchical composition, probabilistic inference, and machine-checkable proof artifacts.",
+  "requestFramePermissions": []
+}
