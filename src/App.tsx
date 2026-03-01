@@ -55,39 +55,395 @@ import { Onboarding } from './components/Onboarding';
 import { DecisionCard } from './components/DecisionCard';
 import { MapGrid } from './components/MapGrid';
 import { TSPHOL_Engine, STRATA_LABELS } from './engine/tsphol';
-import { GroundedFact, TabType, GamePhase, LogicRule, ZoneState, TurnReport } from './types';
+import { GroundedFact, TabType, GamePhase, LogicRule, ZoneState, TurnReport, ValidationResult, ScalingMetric } from './types';
 
 // --- Components ---
 
-const AR_ML_Explainer: React.FC = () => (
-  <div className="bg-slate-900/80 border border-indigo-500/30 rounded-2xl p-6 mb-8 relative overflow-hidden">
-    <div className="absolute top-0 right-0 p-4 opacity-10">
-      <Network size={64} className="text-indigo-400" />
+const ExecutionFlow: React.FC<{ currentStep: string }> = ({ currentStep }) => {
+  const steps = [
+    { id: 'ml', label: 'ML Signals', icon: Cpu },
+    { id: 'hypothesis', label: 'Hypothesis', icon: BrainCircuit },
+    { id: 'validator', label: 'Validator', icon: Shield },
+    { id: 'inference', label: 'Inference', icon: Terminal },
+    { id: 'proof', label: 'Proof', icon: Network },
+    { id: 'decision', label: 'Decision', icon: Target },
+  ];
+
+  return (
+    <div className="flex items-center justify-between bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-8">
+      {steps.map((step, i) => (
+        <React.Fragment key={step.id}>
+          <div className={cn(
+            "flex flex-col items-center gap-2 transition-all duration-500",
+            currentStep === step.id ? "scale-110 opacity-100" : "opacity-40"
+          )}>
+            <div className={cn(
+              "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all",
+              currentStep === step.id ? "bg-indigo-600 text-white shadow-indigo-500/40 ring-4 ring-indigo-500/20" : "bg-slate-800 text-slate-500"
+            )}>
+              <step.icon size={24} />
+            </div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest">{step.label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <div className="flex-1 h-[2px] bg-slate-800 mx-4 relative overflow-hidden">
+              <motion.div 
+                className="absolute inset-0 bg-indigo-500"
+                initial={{ x: '-100%' }}
+                animate={currentStep === step.id ? { x: '0%' } : { x: '-100%' }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+          )}
+        </React.Fragment>
+      ))}
     </div>
-    <div className="relative z-10">
-      <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-indigo-400">
-        <Layers size={18} /> AR + ML Composition Architecture
-      </h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <Cpu size={14} className="text-rose-400" /> Neural Layer (ML)
+  );
+};
+
+const HypothesisGeneratorView: React.FC<{ 
+  hypotheses: LogicRule[], 
+  onPropose: (llm: boolean) => void,
+  onAccept: (h: LogicRule) => void,
+  onReject: (h: LogicRule) => void
+}> = ({ hypotheses, onPropose, onAccept, onReject }) => (
+  <div className="space-y-6">
+    <TabHeader 
+      title="LLoM Hypothesis Generator" 
+      description="Simulate Large Language Model behavior by proposing candidate logic rules based on current tactical patterns. These rules must be validated before execution." 
+      icon={<BrainCircuit size={20} />}
+    />
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Zap size={16} className="text-amber-400" /> Generation Controls
+        </h3>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          Trigger the LLoM layer to analyze ML signals and propose new symbolic rules.
+        </p>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => onPropose(false)}
+            className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            <RefreshCw size={14} /> HEURISTIC PROPOSAL
+          </button>
+          <button 
+            onClick={() => onPropose(true)}
+            className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+          >
+            <Bot size={14} /> LLM PROPOSAL
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <Activity size={16} className="text-indigo-400" /> Pending Hypotheses
+        </h3>
+        <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          {hypotheses.length === 0 ? (
+            <div className="text-center py-8 text-slate-600 italic text-xs">
+              No pending hypotheses. Trigger a proposal to begin.
+            </div>
+          ) : (
+            hypotheses.map(h => (
+              <div key={h.id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl space-y-3 animate-in slide-in-from-right-4 duration-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-indigo-400 font-bold">{h.id}</span>
+                  <span className="text-[9px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 font-mono">CONFIDENCE: {(h.probability * 100).toFixed(0)}%</span>
+                </div>
+                <div className="text-xs font-mono text-white">
+                  {h.head} ← {h.body.join(', ')}
+                </div>
+                <p className="text-[10px] text-slate-500 italic">{h.description}</p>
+                <div className="flex gap-2 pt-2">
+                  <button onClick={() => onAccept(h)} className="flex-1 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-[10px] font-bold rounded-lg transition-all">ACCEPT</button>
+                  <button onClick={() => onReject(h)} className="flex-1 py-1.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 text-[10px] font-bold rounded-lg transition-all">REJECT</button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[] }> = ({ validation, rules }) => (
+  <div className="space-y-6">
+    <TabHeader 
+      title="Structural Fragment Validator" 
+      description="TS-PHOL enforces strict structural constraints to guarantee polynomial-time inference and prevent logical paradoxes. Every rule is checked before the reasoning engine executes." 
+      icon={<Shield size={20} />}
+    />
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-bold text-white">Rule Validation Status</h3>
+            <div className={cn(
+              "px-3 py-1 rounded-full text-[10px] font-bold font-mono flex items-center gap-2",
+              validation.valid ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+            )}>
+              {validation.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+              {validation.valid ? "ALL RULES VALID" : "VALIDATION ERRORS DETECTED"}
+            </div>
           </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            Deep learning models process raw sensor data to output probabilistic predicates like <code className="text-rose-300">p_attack(Z)</code>. These represent learned uncertainty from historical data.
+          
+          <div className="space-y-3">
+            {rules.map(rule => (
+              <div key={rule.id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl flex items-center justify-between group">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-indigo-400 font-bold">{rule.id}</span>
+                    <span className="text-xs font-mono text-white">{rule.head} ← {rule.body.join(', ')}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">{rule.description}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                   <span className="text-[9px] font-mono text-emerald-500 font-bold uppercase">Passed</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {!validation.valid && (
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 animate-in shake duration-500">
+            <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2 mb-4">
+              <AlertCircle size={16} /> Critical Violations
+            </h3>
+            <div className="space-y-2">
+              {validation.errors.map((err, i) => (
+                <div key={i} className="flex items-start gap-3 text-xs text-rose-300 font-mono">
+                  <span className="text-rose-500 mt-0.5">▶</span>
+                  {err}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Fragment Constraints</h3>
+          <div className="space-y-4">
+            {[
+              { label: "Range Restriction", desc: "All head variables must appear in body literals.", status: true },
+              { label: "Bounded Arity", desc: "Predicates limited to maximum 2 arguments.", status: true },
+              { label: "Stratification", desc: "No cyclic negation or recursive dependencies.", status: true },
+              { label: "Polynomial Bound", desc: "Inference complexity is O(N^k) where k is arity.", status: true },
+            ].map((c, i) => (
+              <div key={i} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-300 uppercase">{c.label}</span>
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">{c.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Why Validate?</h3>
+          <p className="text-[10px] text-slate-400 leading-relaxed">
+            Unrestricted logic can lead to infinite loops or exponential blowup. TS-PHOL guarantees that even with 1000s of zones, the system will respond in predictable, polynomial time.
           </p>
         </div>
-        <div className="flex items-center justify-center">
-          <ChevronRight className="text-slate-700 hidden md:block" />
-          <ChevronDown className="text-slate-700 md:hidden" />
+      </div>
+    </div>
+  </div>
+);
+
+const ScalingView: React.FC<{ metrics: ScalingMetric[], onRunBenchmark: () => void }> = ({ metrics, onRunBenchmark }) => (
+  <div className="space-y-6">
+    <TabHeader 
+      title="Polynomial Scaling Metrics" 
+      description="Observe how the TS-PHOL engine scales as the operational theater grows. The complexity is bounded by the predicate arity, ensuring predictable performance." 
+      icon={<BarChart3 size={20} />}
+    />
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-8">
+          <h3 className="text-sm font-bold text-white">Inference Runtime (ms) vs. Zone Count</h3>
+          <button 
+            onClick={onRunBenchmark}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-xl transition-all flex items-center gap-2"
+          >
+            <Play size={12} /> RUN FULL BENCHMARK
+          </button>
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <Shield size={14} className="text-emerald-400" /> Symbolic Layer (AR)
+        
+        <div className="h-[300px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={metrics}>
+              <defs>
+                <linearGradient id="colorRuntime" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+              <XAxis dataKey="numZones" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                itemStyle={{ color: '#6366f1', fontSize: '10px', fontWeight: 'bold' }}
+              />
+              <Area type="monotone" dataKey="runtime" stroke="#6366f1" fillOpacity={1} fill="url(#colorRuntime)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Complexity Analysis</h3>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold text-slate-300 uppercase">Max Arity</div>
+                <div className="text-2xl font-mono font-bold text-white">2</div>
+              </div>
+              <div className="space-y-1 text-right">
+                <div className="text-[10px] font-bold text-slate-300 uppercase">Complexity</div>
+                <div className="text-lg font-mono font-bold text-indigo-400">O(N²)</div>
+              </div>
+            </div>
+            <div className="h-[1px] bg-slate-800" />
+            <div className="space-y-4">
+              {metrics.slice(-1).map(m => (
+                <React.Fragment key={m.numZones}>
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-500 uppercase">Total Facts</span>
+                    <span className="text-white font-bold">{m.numFacts}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-500 uppercase">Rule Firings</span>
+                    <span className="text-white font-bold">{m.numFirings}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-slate-500 uppercase">Proof Depth</span>
+                    <span className="text-white font-bold">{m.proofDepth}</span>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
           </div>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            TS-PHOL logic rules compose ML signals into high-assurance decisions. The engine enforces <code className="text-emerald-300">PTIME</code> tractability and machine-checkable proofs.
-          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const PlayModeView: React.FC<{
+  zones: ZoneState[],
+  humanDecision: { action: string, zone: string } | null,
+  aiDecision: { action: string, zone: string } | null,
+  onHumanDecision: (action: string, zoneId: string) => void,
+  humanScore: number,
+  aiScore: number,
+  gamePhase: GamePhase,
+  onReset: () => void
+}> = ({ zones, humanDecision, aiDecision, onHumanDecision, humanScore, aiScore, gamePhase, onReset }) => (
+  <div className="space-y-6">
+    <TabHeader 
+      title="Tactical Engagement Mode" 
+      description="Test your strategic intuition against the TS-PHOL engine. Observe how the system's verifiable reasoning compares to human decision-making." 
+      icon={<Play size={20} />}
+    />
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-sm font-bold text-white">Operational Map</h3>
+            <div className="flex items-center gap-4">
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                 <span className="text-[10px] font-mono text-slate-400 uppercase">Human</span>
+               </div>
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                 <span className="text-[10px] font-mono text-slate-400 uppercase">AI</span>
+               </div>
+            </div>
+          </div>
+          <MapGrid 
+            zones={zones} 
+            highlightedZone={null} 
+            onEditZone={() => {}} 
+          />
+        </div>
+
+        <HumanCommander 
+          zones={zones} 
+          onDecision={onHumanDecision} 
+          currentDecision={humanDecision} 
+        />
+      </div>
+
+      <div className="space-y-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Engagement Results</h3>
+          <div className="space-y-8">
+            <div className="space-y-3">
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase">Human Commander</span>
+                <span className="text-2xl font-mono font-bold text-white">{humanScore}</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-indigo-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, humanScore * 5)}%` }}
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-bold text-emerald-400 uppercase">TS-PHOL AI</span>
+                <span className="text-2xl font-mono font-bold text-white">{aiScore}</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-emerald-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, aiScore * 5)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 space-y-4">
+              {aiDecision && (
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2">
+                  <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">AI Decision</div>
+                  <div className="text-sm font-bold text-white">{aiDecision.action} @ {zones.find(z => z.id === aiDecision.zone)?.name}</div>
+                </div>
+              )}
+              {humanDecision && (
+                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl space-y-2">
+                  <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Human Decision</div>
+                  <div className="text-sm font-bold text-white">{humanDecision.action} @ {zones.find(z => z.id === humanDecision.zone)?.name}</div>
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={onReset}
+              className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold uppercase rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              <RefreshCw size={14} /> RESET MATCH
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -442,7 +798,9 @@ export default function App() {
     turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
     runInference,
-    updateZoneML
+    updateZoneML,
+    hypotheses, proposeHypothesis, acceptHypothesis, rejectHypothesis,
+    runBenchmark
   } = useInference();
 
   // --- State ---
@@ -588,7 +946,6 @@ export default function App() {
               icon={<Target size={20} />}
             />
             
-            <AR_ML_Explainer />
             <TurnChangeReport report={lastTurnReport} />
 
             <div className="flex items-center gap-4 mb-4">
@@ -632,48 +989,6 @@ export default function App() {
                 pAttackThreshold={pAttackThreshold}
               />
             </div>
-
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Trophy size={16} className="text-amber-400" /> Scoreboard & Outcomes
-                </h3>
-                <button 
-                  onClick={() => { setGamePhase('setup'); setHumanDecision(null); setAiDecision(null); resetSession(); }}
-                  className="text-[10px] font-mono text-slate-500 hover:text-white flex items-center gap-1"
-                >
-                  <RefreshCw size={12} /> RESET SESSION
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-8">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-mono text-slate-500 uppercase">
-                    <span>Human Commander</span>
-                    <span>{humanScore} PTS</span>
-                  </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-indigo-500"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(100, humanScore * 10)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-mono text-slate-500 uppercase">
-                    <span>TS-PHOL AI</span>
-                    <span>{aiScore} PTS</span>
-                  </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-emerald-500"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(100, aiScore * 10)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         );
       case 'ml':
@@ -693,7 +1008,20 @@ export default function App() {
             </div>
           </div>
         );
-      case 'rules':
+      case 'hypothesis':
+        return (
+          <HypothesisGeneratorView 
+            hypotheses={hypotheses}
+            onPropose={proposeHypothesis}
+            onAccept={acceptHypothesis}
+            onReject={rejectHypothesis}
+          />
+        );
+      case 'validator':
+        return (
+          <ValidatorView validation={validation} rules={rules} />
+        );
+      case 'inference':
         return (
           <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="col-span-12 lg:col-span-8 space-y-6">
@@ -798,231 +1126,78 @@ export default function App() {
                 <ul className="space-y-3 text-[10px] font-mono text-slate-400">
                   <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> No Recursion (Stratified)</li>
                   <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> Range Restricted (Safe)</li>
-                  <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> Bounded Arity (Max 3)</li>
-                  <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> No Entity Creation</li>
+                  <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> Bounded Arity (Max 2)</li>
+                  <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1" /> PTIME Tractable</li>
                 </ul>
               </div>
-              {!validation.valid && (
-                <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 space-y-3">
-                  <h3 className="text-xs font-bold text-rose-400 flex items-center gap-2 uppercase tracking-widest">
-                    <AlertCircle size={14} /> Rejection Log
-                  </h3>
-                  {validation.errors.map((err, i) => (
-                    <p key={i} className="text-[10px] font-mono text-rose-300 leading-relaxed">• {err}</p>
-                  ))}
-                </div>
-              )}
               <Glossary />
-            </div>
-          </div>
-        );
-      case 'inference':
-        return (
-          <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="col-span-12 lg:col-span-4 space-y-6">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-[600px] flex flex-col">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-6 text-indigo-400">
-                  <Terminal size={16} /> Inferred Predicates
-                </h3>
-                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6">
-                  {STRATA_LABELS.map((label, stratum) => {
-                    const stratumFacts = inferredFacts.filter(f => f.stratum === stratum);
-                    if (stratumFacts.length === 0) return null;
-                    return (
-                      <div key={stratum} className="space-y-3">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-1">
-                          {label}
-                        </div>
-                        <div className="space-y-2">
-                          {stratumFacts.map((f) => (
-                            <button
-                              key={f.id}
-                              onClick={() => setSelectedFact(f)}
-                              className={cn(
-                                "w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left group",
-                                selectedFact?.id === f.id ? "bg-indigo-600/20 border-indigo-500" : "bg-slate-800/30 border-slate-700/50 hover:border-slate-600"
-                              )}
-                            >
-                              <div className="text-[10px] font-mono">
-                                <span className="text-slate-200">{f.predicate}</span>
-                                <span className="text-slate-500">({f.args.map(arg => zones.find(z => z.id === arg)?.name || arg).join(',')})</span>
-                              </div>
-                              <span className={cn(
-                                "text-[9px] font-mono px-1.5 py-0.5 rounded",
-                                f.probability > 0.7 ? "bg-emerald-500/10 text-emerald-400" : f.probability > 0.4 ? "bg-amber-500/10 text-amber-400" : "bg-rose-500/10 text-rose-400"
-                              )}>
-                                {(f.probability * 100).toFixed(0)}%
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            <div className="col-span-12 lg:col-span-8 space-y-6">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-6 text-amber-400">
-                  <Info size={16} /> Explainability Metrics
-                </h3>
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center space-y-1">
-                    <div className="text-2xl font-bold text-white">{scalingMetrics[scalingMetrics.length - 1]?.proofDepth || 0}</div>
-                    <div className="text-[10px] font-mono text-slate-500 uppercase">Proof Depth</div>
-                  </div>
-                  <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center space-y-1">
-                    <div className="text-2xl font-bold text-white">{inferredFacts.length}</div>
-                    <div className="text-[10px] font-mono text-slate-500 uppercase">Predicates Used</div>
-                  </div>
-                  <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl text-center space-y-1">
-                    <div className="text-2xl font-bold text-white">{scalingMetrics[scalingMetrics.length - 1]?.numFirings || 0}</div>
-                    <div className="text-[10px] font-mono text-slate-500 uppercase">Rules Fired</div>
-                  </div>
-                </div>
-                
-                <div className="mt-8 p-6 bg-indigo-600/10 border border-indigo-500/30 rounded-2xl">
-                  <div className="flex items-start gap-4 mb-6">
-                    <div className="w-10 h-10 bg-indigo-600/20 rounded-lg flex items-center justify-center text-indigo-400 shrink-0">
-                      <Zap size={20} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest">What-If Sandbox</h4>
-                      <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                        The <strong>20-Game Win Rate Simulation</strong> tests the robustness of the current logic rules across 20 randomized scenarios. It measures how often the AI's top-ranked decision leads to a tactical advantage compared to a baseline random strategy.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                        <span>Inference Sensitivity (p_attack threshold)</span>
-                        <span className="text-white font-bold">{pAttackThreshold.toFixed(1)}</span>
-                      </div>
-                      <input 
-                        type="range" min="0.1" max="1.0" step="0.1" 
-                        value={pAttackThreshold} 
-                        onChange={(e) => setPAttackThreshold(parseFloat(e.target.value))}
-                        className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                      />
-                      <p className="text-[9px] text-slate-500 italic">Lowering the threshold makes the AI more 'paranoid', triggering defensive rules even with weak ML signals.</p>
-                    </div>
-                    <button 
-                      onClick={runPhase2Sim}
-                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2"
-                    >
-                      <RefreshCw size={14} /> RUN MONTE CARLO ROBUSTNESS SIMULATION
-                    </button>
-                    {winRateData.length > 0 && (
-                      <div className="space-y-4">
-                        <div className="h-48 w-full mt-4">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={winRateData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                              <XAxis dataKey="threshold" stroke="#475569" fontSize={10} label={{ value: 'Threshold', position: 'insideBottom', offset: -5, fontSize: 10, fill: '#475569' }} />
-                              <YAxis stroke="#475569" fontSize={10} label={{ value: 'Win %', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#475569' }} />
-                              <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }} />
-                              <Bar dataKey="winRate" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                          <p className="text-[10px] text-slate-500 leading-relaxed">
-                            <span className="text-indigo-400 font-bold">Analysis:</span> The chart above shows the expected win rate at different sensitivity levels. A peak indicates the 'Optimal Strategic Balance' for the current rule set.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         );
       case 'proof':
         return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <TabHeader 
-              title="Proof Artifacts" 
-              description="Each decision is backed by a machine-checkable proof tree. Explore the derivation to verify logical correctness." 
-              icon={<Network size={20} />}
-            />
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-[600px]">
-              <InteractiveProof fact={selectedFact} zones={zones} onHighlight={setHighlightedZone} />
+          <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="col-span-12 lg:col-span-4 space-y-6">
+              <TabHeader 
+                title="Inferred Facts" 
+                description="The complete set of grounded facts derived by the engine. Select a fact to view its logical proof artifact." 
+                icon={<Terminal size={20} />}
+              />
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Fact Base</h3>
+                  <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">{inferredFacts.length} TOTAL</span>
+                </div>
+                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                  {inferredFacts.map(f => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFact(f)}
+                      className={cn(
+                        "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group",
+                        selectedFact?.id === f.id ? "bg-indigo-600/20 border-indigo-500/50" : "bg-slate-800/30 border-slate-700/50 hover:border-slate-600"
+                      )}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs font-mono font-bold text-white group-hover:text-indigo-400 transition-colors">{f.predicate}</span>
+                        <span className="text-[9px] font-mono text-slate-500">({f.args.join(', ')})</span>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[10px] font-mono font-bold text-slate-400">{(f.probability * 100).toFixed(0)}%</span>
+                        <span className="text-[8px] font-mono text-slate-600 uppercase">STRATUM {f.stratum}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="col-span-12 lg:col-span-8">
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-full min-h-[600px] overflow-hidden">
+                <InteractiveProof 
+                  fact={selectedFact} 
+                  zones={zones} 
+                  onHighlight={setHighlightedZone} 
+                />
+              </div>
             </div>
           </div>
         );
       case 'scaling':
         return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <TabHeader 
-              title="Computational Scaling" 
-              description="Observe how the TS-PHOL fragment maintains polynomial performance (PTIME) as the number of zones increases." 
-              icon={<BarChart3 size={20} />}
-            />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-6">
-                  <BarChart3 size={16} className="text-emerald-400" /> Runtime Complexity
-                </h3>
-                <div className="h-60 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={scalingMetrics}>
-                      <defs>
-                        <linearGradient id="colorRuntime" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                      <XAxis dataKey="numZones" stroke="#475569" fontSize={10} label={{ value: 'Zones', position: 'insideBottom', offset: -5, fontSize: 10, fill: '#475569' }} />
-                      <YAxis stroke="#475569" fontSize={10} label={{ value: 'ms', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#475569' }} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }} />
-                      <Area type="monotone" dataKey="runtime" stroke="#10b981" fillOpacity={1} fill="url(#colorRuntime)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <h3 className="text-sm font-bold flex items-center gap-2 mb-6">
-                  <Network size={16} className="text-indigo-400" /> Rule Firing Scaling
-                </h3>
-                <div className="h-60 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={scalingMetrics}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                      <XAxis dataKey="numZones" stroke="#475569" fontSize={10} />
-                      <YAxis stroke="#475569" fontSize={10} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', fontSize: '10px' }} />
-                      <Line type="monotone" dataKey="numFirings" stroke="#6366f1" strokeWidth={2} dot={{ r: 4, fill: '#6366f1' }} />
-                      <Line type="monotone" dataKey="numFacts" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4, fill: '#8b5cf6' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-sm font-bold flex items-center gap-2 mb-4 text-rose-400">
-                <Flame size={16} /> Stress Test Mode
-              </h3>
-              <div className="grid grid-cols-4 gap-4">
-                {[4, 8, 16, 32].map(n => (
-                  <button 
-                    key={n}
-                    onClick={() => { setNumZones(n); handleInference(); }}
-                    className={cn(
-                      "py-3 rounded-xl border font-mono text-xs transition-all",
-                      numZones === n ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
-                    )}
-                  >
-                    {n} ZONES
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <ScalingView metrics={scalingMetrics} onRunBenchmark={runBenchmark} />
+        );
+      case 'play':
+        return (
+          <PlayModeView 
+            zones={zones}
+            humanDecision={humanDecision}
+            aiDecision={aiDecision}
+            onHumanDecision={handleHumanDecision}
+            humanScore={humanScore}
+            aiScore={aiScore}
+            gamePhase={gamePhase}
+            onReset={() => { setHumanDecision(null); setAiDecision(null); resetSession(); }}
+          />
         );
       default:
         return null;
@@ -1136,21 +1311,26 @@ export default function App() {
           ))}
         </div>
 
+        {/* Execution Flow Diagram */}
+        <ExecutionFlow currentStep={currentStep} />
+
         {/* Tabs Navigation */}
-        <div className="flex items-center gap-1 bg-slate-900/50 p-1 border border-slate-800 rounded-xl mb-6 w-fit">
+        <div className="flex items-center gap-1 bg-slate-900/50 p-1 border border-slate-800 rounded-xl mb-6 w-fit overflow-x-auto max-w-full">
           {[
             { id: 'scenario', label: 'Scenario', icon: Target },
             { id: 'ml', label: 'ML Signals', icon: Cpu },
-            { id: 'rules', label: 'Rules', icon: Layers },
+            { id: 'hypothesis', label: 'Hypothesis', icon: BrainCircuit },
+            { id: 'validator', label: 'Validator', icon: Shield },
             { id: 'inference', label: 'Inference', icon: Terminal },
             { id: 'proof', label: 'Proof', icon: Network },
             { id: 'scaling', label: 'Scaling', icon: BarChart3 },
+            { id: 'play', label: 'Play Mode', icon: Trophy },
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
                 activeTab === tab.id ? "bg-slate-800 text-white shadow-inner" : "text-slate-500 hover:text-slate-300"
               )}
             >

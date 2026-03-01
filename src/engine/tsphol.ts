@@ -4,6 +4,7 @@
  */
 
 import { ZoneState, LogicRule, GroundedFact, ValidationResult } from '../types';
+import { StructuralValidator } from './validator';
 
 export const ZONE_NAMES = [
   "Frontier Ridge", "Iron Valley", "Delta Supply Route", "Echo Stronghold",
@@ -55,50 +56,16 @@ export class TSPHOL_Engine {
   private rules: LogicRule[];
   private groundedFacts: GroundedFact[] = [];
   private firingsCount: number = 0;
+  private validator: StructuralValidator;
 
   constructor(zones: ZoneState[], rules: LogicRule[]) {
     this.zones = zones;
     this.rules = rules;
+    this.validator = new StructuralValidator(rules);
   }
 
   public validateRules(): ValidationResult {
-    const errors: string[] = [];
-    
-    for (const rule of this.rules) {
-      // 1. Range Restriction
-      const headVars = this.getVars(rule.head);
-      const bodyVars = new Set<string>();
-      rule.body.forEach(b => this.getVars(b).forEach(v => bodyVars.add(v)));
-      
-      headVars.forEach(v => {
-        if (!bodyVars.has(v)) {
-          errors.push(`Rule ${rule.id}: Variable '${v}' in head is not range-restricted.`);
-        }
-      });
-
-      // 2. Bounded Arity
-      const headArity = this.getArgs(rule.head).length;
-      if (headArity > 3) {
-        errors.push(`Rule ${rule.id}: Arity (${headArity}) exceeds bound (3).`);
-      }
-
-      // 3. No Cycles / Stratification
-      rule.body.forEach(bodyAtom => {
-        const bodyPredicate = bodyAtom.split('(')[0];
-        const dependencyRule = this.rules.find(r => r.head.startsWith(bodyPredicate));
-        if (dependencyRule && dependencyRule.stratum >= rule.stratum) {
-          errors.push(`Rule ${rule.id}: Stratification violation (depends on stratum ${dependencyRule.stratum} >= ${rule.stratum}).`);
-        }
-      });
-    }
-
-    return { valid: errors.length === 0, errors };
-  }
-
-  private getVars(atom: string): string[] {
-    const match = atom.match(/\((.*)\)/);
-    if (!match) return [];
-    return match[1].split(',').map(s => s.trim()).filter(s => s === s.toLowerCase() && s.length === 1);
+    return this.validator.validateAll();
   }
 
   private getArgs(atom: string): string[] {
@@ -111,60 +78,82 @@ export class TSPHOL_Engine {
     this.groundedFacts = [];
     this.firingsCount = 0;
 
-    // Stratum 0: Base Facts
+    // 1. Validate rules first - only run inference with valid rules
+    const validation = this.validateRules();
+    const validRules = this.rules.filter(r => {
+      const res = this.validator.validateRule(r);
+      return res.valid;
+    });
+
+    // Stratum 0: Base Facts (Grounding ML signals and state)
     this.zones.forEach(z => {
-      const baseArgs = [z.id];
-      const addFact = (pred: string, prob: number) => {
+      const addFact = (pred: string, args: string[], prob: number) => {
         this.groundedFacts.push({ 
-          id: `${pred}_${z.id}`, 
+          id: `${pred}_${args.join('_')}`, 
           predicate: pred, 
-          args: baseArgs, 
+          args: args, 
           probability: prob, 
           stratum: 0, 
           childFacts: [] 
         });
       };
 
-      addFact('EnemyPresence', z.enemy > 0 ? 1 : 0);
-      addFact('LowDefense', z.ours < 5 ? 1 : 0);
-      addFact('StrategicValue', z.value / 100);
-      addFact('SupplyRich', z.supply > 50 ? 1 : 0);
-      addFact('SupplyAvailable', z.supply > 10 ? 1 : 0);
-      addFact('NoFog', z.fog ? 0 : 1);
-      addFact('p_success_high', z.p_success);
-      addFact('p_attack_high', z.p_attack > pAttackThreshold ? z.p_attack : 0);
+      addFact('EnemyPresence', [z.id], z.enemy > 0 ? 1 : 0);
+      addFact('LowDefense', [z.id], z.ours < 5 ? 1 : 0);
+      addFact('StrategicValue', [z.id], z.value / 100);
+      addFact('SupplyRich', [z.id], z.supply > 50 ? 1 : 0);
+      addFact('SupplyAvailable', [z.id], z.supply > 10 ? 1 : 0);
+      addFact('NoFog', [z.id], z.fog ? 0 : 1);
+      addFact('p_success_high', [z.id], z.p_success);
+      addFact('p_attack_high', [z.id], z.p_attack > pAttackThreshold ? z.p_attack : 0);
     });
 
-    // Stratum 1 to 3
+    // Stratum 1 to 3: Recursive (but stratified) Inference
     for (let s = 1; s <= 3; s++) {
-      const stratumRules = this.rules.filter(r => r.stratum === s);
+      const stratumRules = validRules.filter(r => r.stratum === s);
       stratumRules.forEach(rule => {
+        // For each rule, we find all possible groundings of variables
+        // In this PoC, we assume 'z' is the only variable and it ranges over zones.
         this.zones.forEach(z => {
+          const bodyMatches: GroundedFact[] = [];
           const bodySatisfied = rule.body.every(atom => {
             const pred = atom.split('(')[0];
-            return this.groundedFacts.some(f => f.predicate === pred && f.args.includes(z.id));
+            const args = this.getArgs(atom);
+            
+            // Find a fact that matches this predicate and arguments
+            // (Simple variable matching: 'z' matches current zone id)
+            const fact = this.groundedFacts.find(f => {
+              if (f.predicate !== pred) return false;
+              return args.every((arg, i) => arg === 'z' ? f.args[i] === z.id : f.args[i] === arg);
+            });
+
+            if (fact) {
+              bodyMatches.push(fact);
+              return true;
+            }
+            return false;
           });
 
           if (bodySatisfied) {
             this.firingsCount++;
-            const childFacts = rule.body.map(atom => {
-              const pred = atom.split('(')[0];
-              return this.groundedFacts.find(f => f.predicate === pred && f.args.includes(z.id))!;
-            });
-
-            const combinedProb = childFacts.reduce((acc, f) => acc * f.probability, 1) * rule.probability;
+            const combinedProb = bodyMatches.reduce((acc, f) => acc * f.probability, 1) * rule.probability;
             const headPred = rule.head.split('(')[0];
             const headArgs = this.getArgs(rule.head).map(a => a === 'z' ? z.id : a);
 
-            this.groundedFacts.push({
-              id: `${headPred}_${headArgs.join('_')}`,
-              predicate: headPred,
-              args: headArgs,
-              probability: combinedProb,
-              stratum: s,
-              ruleId: rule.id,
-              childFacts
-            });
+            const factId = `${headPred}_${headArgs.join('_')}`;
+            
+            // Check if fact already exists (avoid duplicates in same stratum)
+            if (!this.groundedFacts.some(f => f.id === factId)) {
+              this.groundedFacts.push({
+                id: factId,
+                predicate: headPred,
+                args: headArgs,
+                probability: combinedProb,
+                stratum: s,
+                ruleId: rule.id,
+                childFacts: bodyMatches
+              });
+            }
           }
         });
       });
@@ -173,3 +162,4 @@ export class TSPHOL_Engine {
     return { facts: this.groundedFacts, firings: this.firingsCount };
   }
 }
+

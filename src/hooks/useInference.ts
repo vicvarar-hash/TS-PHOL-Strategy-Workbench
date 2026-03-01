@@ -6,6 +6,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ZoneState, LogicRule, GroundedFact, ValidationResult, ScalingMetric, TurnReport } from '../types';
 import { TSPHOL_Engine, ZONE_NAMES, DEFAULT_RULES } from '../engine/tsphol';
+import { HypothesisGenerator } from '../engine/hypothesisGenerator';
+import { ScalingMetrics } from '../engine/scalingMetrics';
 
 // Simple seeded random for reproducibility
 const mulberry32 = (a: number) => {
@@ -21,19 +23,22 @@ export function useInference() {
   const [numZones, setNumZones] = useState(8);
   const [zones, setZones] = useState<ZoneState[]>([]);
   const [rules, setRules] = useState<LogicRule[]>(DEFAULT_RULES);
+  const [hypotheses, setHypotheses] = useState<LogicRule[]>([]);
   const [validation, setValidation] = useState<ValidationResult>({ valid: true, errors: [] });
   const [inferredFacts, setInferredFacts] = useState<GroundedFact[]>([]);
   const [scalingMetrics, setScalingMetrics] = useState<ScalingMetric[]>([]);
   const [isInferring, setIsInferring] = useState(false);
-  const [currentStep, setCurrentStep] = useState('state');
+  const [currentStep, setCurrentStep] = useState('ml');
   const [pAttackThreshold, setPAttackThreshold] = useState(0.5);
   const [seed, setSeed] = useState<string>(Math.random().toString(36).substring(7));
   const [turn, setTurn] = useState(1);
   const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
 
+  const hypothesisGenerator = new HypothesisGenerator();
+
   const initZones = useCallback((n: number, customSeed?: string) => {
     const activeSeed = customSeed || seed;
-    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn; // Add turn to seed for variability
+    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn; 
     const rng = mulberry32(rngSeed);
 
     const newZones: ZoneState[] = Array.from({ length: n }, (_, i) => ({
@@ -51,6 +56,37 @@ export function useInference() {
     return newZones;
   }, [seed, turn]);
 
+  const proposeHypothesis = useCallback(async (useLLM: boolean = false) => {
+    if (useLLM) {
+      const h = await hypothesisGenerator.generateFromLLM(zones, rules);
+      setHypotheses(prev => [...prev, h]);
+    } else {
+      const h = hypothesisGenerator.generateHypothesis(rules);
+      setHypotheses(prev => [...prev, h]);
+    }
+  }, [zones, rules]);
+
+  const acceptHypothesis = useCallback((h: LogicRule) => {
+    setRules(prev => [...prev, h]);
+    setHypotheses(prev => prev.filter(item => item.id !== h.id));
+  }, []);
+
+  const rejectHypothesis = useCallback((h: LogicRule) => {
+    setHypotheses(prev => prev.filter(item => item.id !== h.id));
+  }, []);
+
+  const runBenchmark = useCallback(async () => {
+    const metrics: ScalingMetric[] = [];
+    const scaler = new ScalingMetrics(rules);
+    const sizes = [4, 8, 16, 32, 64];
+    
+    for (const size of sizes) {
+      const m = await scaler.runBenchmark(size);
+      metrics.push(m);
+    }
+    setScalingMetrics(metrics);
+  }, [rules]);
+
   const advanceTurn = useCallback((humanAction?: { action: string, zone: string }, aiAction?: { action: string, zone: string }) => {
     const rng = mulberry32(Date.now());
     const report: TurnReport = { 
@@ -59,7 +95,6 @@ export function useInference() {
       summary: `End of Strategic Turn ${turn}. Tactical movements processed.`
     };
     
-    // Process combat if both made decisions
     if (humanAction && aiAction) {
       if (humanAction.zone === aiAction.zone) {
         report.changes.push({
@@ -110,7 +145,6 @@ export function useInference() {
         });
       }
       
-      // Update ML signals slightly
       newZ.p_attack = Math.max(0, Math.min(1, newZ.p_attack + (rng() - 0.5) * 0.1));
       newZ.p_success = Math.max(0, Math.min(1, newZ.p_success + (rng() - 0.5) * 0.1));
       
@@ -141,7 +175,7 @@ export function useInference() {
     if (!silent) setCurrentStep('ml');
     
     await new Promise(r => setTimeout(r, 400));
-    if (!silent) setCurrentStep('pred');
+    if (!silent) setCurrentStep('hypothesis');
     
     const engine = new TSPHOL_Engine(zones, rules);
     const val = engine.validateRules();
@@ -153,7 +187,10 @@ export function useInference() {
     }
 
     if (!silent) await new Promise(r => setTimeout(r, 400));
-    if (!silent) setCurrentStep('logic');
+    if (!silent) setCurrentStep('validator');
+
+    if (!silent) await new Promise(r => setTimeout(r, 400));
+    if (!silent) setCurrentStep('inference');
 
     const start = performance.now();
     const { facts, firings } = engine.runInference(pAttackThreshold);
@@ -190,9 +227,12 @@ export function useInference() {
     numZones, setNumZones,
     zones, setZones,
     rules, setRules,
+    hypotheses, setHypotheses,
+    proposeHypothesis, acceptHypothesis, rejectHypothesis,
     validation, setValidation,
     inferredFacts, setInferredFacts,
     scalingMetrics, setScalingMetrics,
+    runBenchmark,
     isInferring, setIsInferring,
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
@@ -203,3 +243,4 @@ export function useInference() {
     updateZoneML
   };
 }
+

@@ -61,7 +61,7 @@ export interface ScalingMetric {
 }
 
 export type GamePhase = 'setup' | 'human_turn' | 'ai_turn' | 'result';
-export type TabType = 'scenario' | 'ml' | 'rules' | 'inference' | 'proof' | 'scaling';
+export type TabType = 'scenario' | 'ml' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling' | 'play';
 
 export interface ScenarioData {
   zones: ZoneState[];
