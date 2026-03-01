@@ -33,6 +33,8 @@ export function useInference() {
   const [seed, setSeed] = useState<string>(Math.random().toString(36).substring(7));
   const [turn, setTurn] = useState(1);
   const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
+  const [isStale, setIsStale] = useState(false);
+  const [isGeneratingHypothesis, setIsGeneratingHypothesis] = useState(false);
 
   const hypothesisGenerator = new HypothesisGenerator();
 
@@ -53,13 +55,19 @@ export function useInference() {
       p_success: rng(),
     }));
     setZones(newZones);
+    setIsStale(true);
     return newZones;
   }, [seed, turn]);
 
   const proposeHypothesis = useCallback(async (useLLM: boolean = false) => {
     if (useLLM) {
-      const h = await hypothesisGenerator.generateFromLLM(zones, rules);
-      setHypotheses(prev => [...prev, h]);
+      setIsGeneratingHypothesis(true);
+      try {
+        const h = await hypothesisGenerator.generateFromLLM(zones, rules);
+        setHypotheses(prev => [...prev, h]);
+      } finally {
+        setIsGeneratingHypothesis(false);
+      }
     } else {
       const h = hypothesisGenerator.generateHypothesis(rules);
       setHypotheses(prev => [...prev, h]);
@@ -69,6 +77,7 @@ export function useInference() {
   const acceptHypothesis = useCallback((h: LogicRule) => {
     setRules(prev => [...prev, h]);
     setHypotheses(prev => prev.filter(item => item.id !== h.id));
+    setIsStale(true);
   }, []);
 
   const rejectHypothesis = useCallback((h: LogicRule) => {
@@ -154,21 +163,30 @@ export function useInference() {
     setZones(nextZones);
     setTurn(prev => prev + 1);
     setLastTurnReport(report);
+    setIsStale(true);
   }, [zones, turn]);
 
   const updateZoneML = useCallback((zoneId: string, p_attack: number, p_success: number) => {
     setZones(prev => prev.map(z => z.id === zoneId ? { ...z, p_attack, p_success } : z));
+    setIsStale(true);
   }, []);
 
   const resetSession = useCallback(() => {
     setTurn(1);
     setLastTurnReport(null);
     initZones(numZones);
+    setIsStale(true);
   }, [numZones, initZones]);
 
   useEffect(() => {
     initZones(numZones);
   }, [numZones, initZones]);
+
+  useEffect(() => {
+    const engine = new TSPHOL_Engine(zones, rules);
+    const val = engine.validateRules();
+    setValidation(val);
+  }, [rules, zones]);
 
   const runInference = async (silent: boolean = false) => {
     if (!silent) setIsInferring(true);
@@ -200,6 +218,7 @@ export function useInference() {
     if (!silent) setCurrentStep('decision');
 
     setInferredFacts(facts);
+    setIsStale(false);
     
     const decisions = facts.filter(f => f.predicate === 'Execute');
     const bestDecision = decisions.sort((a, b) => b.probability - a.probability)[0];
@@ -234,6 +253,8 @@ export function useInference() {
     scalingMetrics, setScalingMetrics,
     runBenchmark,
     isInferring, setIsInferring,
+    isGeneratingHypothesis,
+    isStale, setIsStale,
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,

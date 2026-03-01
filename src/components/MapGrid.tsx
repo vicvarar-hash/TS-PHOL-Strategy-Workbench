@@ -85,15 +85,15 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
             {editingId === z.id ? (
               <div className="absolute inset-0 z-20 bg-slate-900 p-3 flex flex-col gap-2 overflow-y-auto custom-scrollbar">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[9px] font-bold text-white truncate">{z.name}</span>
+                  <span className="text-[9px] font-bold text-white truncate">{z.id}: {z.name}</span>
                   <div className="flex gap-1.5">
                     <button onClick={(e) => { e.stopPropagation(); saveEdit(); }} className="text-emerald-400 hover:text-emerald-300 transition-colors"><Save size={14} /></button>
                     <button onClick={(e) => { e.stopPropagation(); setEditingId(null); }} className="text-rose-400 hover:text-rose-300 transition-colors"><X size={14} /></button>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Allied Strength</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">Allied</label>
                     <input 
                       type="number" 
                       value={editValues?.ours} 
@@ -102,7 +102,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Enemy Strength</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">Enemy</label>
                     <input 
                       type="number" 
                       value={editValues?.enemy} 
@@ -110,54 +110,91 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">Supply</label>
+                    <input 
+                      type="number" 
+                      value={editValues?.supply} 
+                      onChange={e => setEditValues(prev => prev ? {...prev, supply: parseInt(e.target.value)} : null)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">Value</label>
+                    <input 
+                      type="number" 
+                      value={editValues?.value} 
+                      onChange={e => setEditValues(prev => prev ? {...prev, value: parseInt(e.target.value)} : null)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-2 flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id={`fog-${z.id}`}
+                      checked={editValues?.fog} 
+                      onChange={e => setEditValues(prev => prev ? {...prev, fog: e.target.checked} : null)}
+                      className="accent-indigo-500"
+                    />
+                    <label htmlFor={`fog-${z.id}`} className="text-[7px] text-slate-500 uppercase font-bold cursor-pointer">Fog of War</label>
+                  </div>
                 </div>
               </div>
             ) : (
               <>
-                <div className="relative mb-2">
+                <div className="relative mb-1">
                   <div className={cn(
-                    "w-10 h-10 rounded-xl border-2 flex items-center justify-center transition-all duration-300 group-hover:rotate-12",
+                    "w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all duration-300 group-hover:rotate-12",
                     z.ours > z.enemy ? "border-indigo-500/30 bg-indigo-500/5 text-indigo-400" : "border-rose-500/30 bg-rose-500/5 text-rose-400"
                   )}>
                     {getTerrainIcon(z.id)}
                   </div>
                   {z.fog && (
-                    <div className="absolute -top-1.5 -right-1.5 bg-slate-950 rounded-full p-1 border border-slate-800 shadow-lg">
-                      <Eye size={10} className="text-slate-500" />
+                    <div className="absolute -top-1.5 -right-1.5 bg-slate-950 rounded-full p-0.5 border border-slate-800 shadow-lg">
+                      <Eye size={8} className="text-slate-500" />
                     </div>
                   )}
                 </div>
                 
-                <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center px-1">{z.name}</div>
+                <div className="text-[8px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center px-1">{z.id}</div>
+                <div className="text-[6px] text-slate-500 uppercase tracking-tighter truncate w-full text-center px-1">{z.name}</div>
                 
                 {/* Strength Indicators */}
-                <div className="mt-2 flex gap-1.5">
+                <div className="mt-1 flex gap-1">
                   <div className="flex flex-col items-center">
-                    <div className="w-1 h-3 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="w-full bg-indigo-500" style={{ height: `${Math.min(100, z.ours * 10)}%` }} />
+                    <div className="w-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full bg-indigo-500" style={{ height: `${Math.min(100, z.ours * 5)}%` }} />
                     </div>
                   </div>
                   <div className="flex flex-col items-center">
-                    <div className="w-1 h-3 bg-slate-800 rounded-full overflow-hidden">
-                      <div className="w-full bg-rose-500" style={{ height: `${Math.min(100, z.enemy * 10)}%` }} />
+                    <div className="w-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full bg-rose-500" style={{ height: `${Math.min(100, z.enemy * 5)}%` }} />
                     </div>
                   </div>
                 </div>
 
                 {/* Mini Stats Overlay on Hover */}
                 <div className="absolute inset-0 bg-slate-900/95 opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col items-center justify-center p-2 pointer-events-none scale-95 group-hover:scale-100">
-                  <div className="text-[8px] font-bold text-white mb-2 border-b border-slate-800 pb-1 w-full text-center">{z.name}</div>
-                  <div className="grid grid-cols-2 gap-3 w-full">
+                  <div className="text-[8px] font-bold text-white mb-1 border-b border-slate-800 pb-1 w-full text-center">{z.id}: {z.name}</div>
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full">
                     <div className="flex flex-col items-center">
-                      <span className="text-[6px] text-slate-500 uppercase font-bold">Allied</span>
-                      <span className="text-[10px] font-bold text-indigo-400">{z.ours}</span>
+                      <span className="text-[5px] text-slate-500 uppercase font-bold">Allied</span>
+                      <span className="text-[8px] font-bold text-indigo-400">{z.ours}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[6px] text-slate-500 uppercase font-bold">Enemy</span>
-                      <span className="text-[10px] font-bold text-rose-400">{z.enemy}</span>
+                      <span className="text-[5px] text-slate-500 uppercase font-bold">Enemy</span>
+                      <span className="text-[8px] font-bold text-rose-400">{z.enemy}</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[5px] text-slate-500 uppercase font-bold">Supply</span>
+                      <span className="text-[8px] font-bold text-amber-400">{z.supply}</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[5px] text-slate-500 uppercase font-bold">Value</span>
+                      <span className="text-[8px] font-bold text-emerald-400">{z.value}</span>
                     </div>
                   </div>
-                  <div className="mt-2 text-[6px] font-mono text-slate-500 uppercase">Click to Edit</div>
+                  <div className="mt-1 text-[5px] font-mono text-slate-500 uppercase">Click to Edit</div>
                 </div>
               </>
             )}

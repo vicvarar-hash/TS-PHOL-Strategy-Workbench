@@ -60,6 +60,12 @@ export interface ScalingMetric {
   proofDepth: number;
 }
 
+export interface ScalingExplanation {
+  runtimeTrend: string;
+  complexityTrend: string;
+  impactNote: string;
+}
+
 export type GamePhase = 'setup' | 'human_turn' | 'ai_turn' | 'result';
 export type TabType = 'scenario' | 'ml' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling' | 'play';
 
