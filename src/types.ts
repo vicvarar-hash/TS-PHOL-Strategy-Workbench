@@ -49,7 +49,6 @@ export interface TurnReport {
     impact?: string;
   }[];
   summary: string;
-  victor?: 'human' | 'ai' | 'draw';
 }
 
 export interface ScalingMetric {
@@ -66,7 +65,7 @@ export interface ScalingExplanation {
   impactNote: string;
 }
 
-export type GamePhase = 'awaiting_human' | 'ai_evaluating' | 'turn_result' | 'ready_next';
+export type GamePhase = 'awaiting_inference' | 'reviewing_recommendations' | 'turn_result';
 export type TabType = 'scenario' | 'ml' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling';
 
 export interface ScenarioData {

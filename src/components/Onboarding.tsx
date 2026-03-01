@@ -20,26 +20,26 @@ export const Onboarding: React.FC = () => {
       color: "text-indigo-400"
     },
     {
-      title: "Step 2: Issue Orders",
-      description: "Select a zone and action to commit your strategic intent. The AI will evaluate its own best move in parallel.",
-      icon: User,
-      color: "text-amber-400"
-    },
-    {
-      title: "Step 3: Run Inference",
-      description: "Execute the TS-PHOL engine to generate high-assurance decisions and compare them with your orders.",
+      title: "Step 2: Run Inference",
+      description: "Execute the TS-PHOL engine to generate high-assurance tactical recommendations for the current turn.",
       icon: Play,
       color: "text-emerald-400"
     },
     {
+      title: "Step 3: Apply Recommendations",
+      description: "Review the top 3 AI suggestions and apply one or more actions. Each action has a deterministic impact on the zone state.",
+      icon: Shield,
+      color: "text-amber-400"
+    },
+    {
       title: "Step 4: Verify Proofs",
-      description: "Inspect the machine-checkable proof artifacts to understand the logical chain behind AI actions.",
+      description: "Inspect the machine-checkable proof artifacts to understand the logical chain behind every AI recommendation.",
       icon: Network,
       color: "text-indigo-400"
     },
     {
       title: "Step 5: Advance Turn",
-      description: "Commit the turn to see tactical consequences. The simulation updates zone states based on both human and AI actions.",
+      description: "Commit the turn to see tactical consequences. The simulation updates based on applied actions and environmental drift.",
       icon: RefreshCw,
       color: "text-rose-400"
     }

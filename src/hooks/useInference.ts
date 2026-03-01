@@ -96,29 +96,15 @@ export function useInference() {
     setScalingMetrics(metrics);
   }, [rules]);
 
-  const advanceTurn = useCallback((humanAction?: { action: string, zone: string }, aiAction?: { action: string, zone: string }) => {
-    const rng = mulberry32(Date.now());
+  const advanceTurn = useCallback(() => {
+    const rngSeed = (parseInt(seed, 36) || 12345) + turn + 999;
+    const rng = mulberry32(rngSeed);
     const report: TurnReport = { 
       turn: turn, 
       changes: [],
-      summary: `End of Strategic Turn ${turn}. Tactical movements processed.`
+      summary: `Strategic Turn ${turn} complete. Intelligence updates processed.`
     };
     
-    if (humanAction && aiAction) {
-      if (humanAction.zone === aiAction.zone) {
-        report.changes.push({
-          zoneId: humanAction.zone,
-          zoneName: zones.find(z => z.id === humanAction.zone)?.name || humanAction.zone,
-          type: 'combat',
-          description: `Direct engagement at ${humanAction.zone}.`,
-          impact: "High attrition for both sides."
-        });
-        report.victor = 'draw';
-      } else {
-        report.summary += ` Human focused on ${humanAction.zone}, AI focused on ${aiAction.zone}.`;
-      }
-    }
-
     const nextZones = zones.map(z => {
       const roll = rng();
       let newZ = { ...z };
@@ -164,7 +150,32 @@ export function useInference() {
     setTurn(prev => prev + 1);
     setLastTurnReport(report);
     setIsStale(true);
-  }, [zones, turn]);
+    return report;
+  }, [zones, turn, seed]);
+
+  const applyRecommendation = useCallback((action: string, zoneId: string) => {
+    setZones(prev => prev.map(z => {
+      if (z.id !== zoneId) return z;
+      const newZ = { ...z };
+      if (action === 'Attack') {
+        newZ.enemy = Math.max(0, Math.round(newZ.enemy * 0.6) - 5);
+        newZ.ours = Math.max(0, newZ.ours - 2);
+        newZ.p_success = Math.min(1, newZ.p_success + 0.1);
+      } else if (action === 'Defend') {
+        newZ.ours += 5;
+        newZ.enemy = Math.max(0, newZ.enemy - 2);
+        newZ.p_attack = Math.max(0, newZ.p_attack - 0.1);
+      } else if (action === 'Reinforce') {
+        newZ.ours += 10;
+        newZ.supply = Math.max(0, newZ.supply - 15);
+      } else if (action === 'Hold') {
+        newZ.supply = Math.min(100, newZ.supply + 10);
+        newZ.ours = Math.min(100, newZ.ours + 1);
+      }
+      return newZ;
+    }));
+    setIsStale(true);
+  }, []);
 
   const updateZoneML = useCallback((zoneId: string, p_attack: number, p_success: number) => {
     setZones(prev => prev.map(z => z.id === zoneId ? { ...z, p_attack, p_success } : z));
@@ -261,7 +272,8 @@ export function useInference() {
     turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
     runInference,
-    updateZoneML
+    updateZoneML,
+    applyRecommendation
   };
 }
 

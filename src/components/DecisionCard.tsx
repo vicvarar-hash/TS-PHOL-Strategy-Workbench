@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { Bot, Target, Shield, Zap, Info, ChevronRight, AlertTriangle, Calculator } from 'lucide-react';
+import { Bot, Target, Shield, Zap, Info, ChevronRight, AlertTriangle, Calculator, Play, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { GroundedFact, ZoneState } from '../types';
 
@@ -15,9 +15,14 @@ interface RecommendationCardProps {
   isPrimary: boolean;
   onShowProof: (fact: GroundedFact) => void;
   isSelected: boolean;
+  onApply: (action: string, zoneId: string, factId: string) => void;
+  isApplied: boolean;
+  disabled: boolean;
 }
 
-const RecommendationCard: React.FC<RecommendationCardProps> = ({ fact, zone, isPrimary, onShowProof, isSelected }) => {
+const RecommendationCard: React.FC<RecommendationCardProps> = ({ 
+  fact, zone, isPrimary, onShowProof, isSelected, onApply, isApplied, disabled 
+}) => {
   const action = fact.args[0];
   const isAttack = action === 'Attack';
   const confidence = fact.probability;
@@ -34,11 +39,12 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ fact, zone, isP
 
   return (
     <motion.div 
-      whileHover={{ y: -2 }}
+      whileHover={!disabled && !isApplied ? { y: -2 } : {}}
       animate={isSelected ? { scale: [1, 1.02, 1], borderColor: ['rgba(99, 102, 241, 0.5)', 'rgba(99, 102, 241, 1)', 'rgba(99, 102, 241, 0.5)'] } : {}}
       transition={isSelected ? { repeat: Infinity, duration: 2 } : {}}
       className={cn(
         "rounded-xl border transition-all overflow-hidden flex flex-col",
+        isApplied ? "bg-emerald-500/10 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]" :
         isSelected ? "bg-indigo-600/10 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)] ring-2 ring-indigo-500/50" :
         isPrimary 
           ? "bg-slate-800/80 border-indigo-500/50 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/20" 
@@ -47,16 +53,20 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ fact, zone, isP
     >
       <div className={cn(
         "px-4 py-2 border-b flex items-center justify-between",
+        isApplied ? "bg-emerald-500/10 border-emerald-500/20" :
         isAttack ? "bg-rose-500/5 border-rose-500/10" : "bg-indigo-500/5 border-indigo-500/10"
       )}>
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-6 h-6 rounded-md flex items-center justify-center",
+            isApplied ? "bg-emerald-600 text-white" :
             isAttack ? "bg-rose-600 text-white" : "bg-indigo-600 text-white"
           )}>
-            {isAttack ? <Zap size={14} /> : <Shield size={14} />}
+            {isApplied ? <CheckCircle2 size={14} /> : isAttack ? <Zap size={14} /> : <Shield size={14} />}
           </div>
-          <span className="text-[10px] font-bold text-white uppercase tracking-wider">{action}</span>
+          <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+            {isApplied ? 'Applied' : action}
+          </span>
         </div>
         <div className="text-right">
           <span className={cn(
@@ -86,12 +96,27 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ fact, zone, isP
           </ul>
         </div>
 
-        <button 
-          onClick={() => onShowProof(fact)}
-          className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 text-[9px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 uppercase tracking-widest"
-        >
-          View Proof <ChevronRight size={12} />
-        </button>
+        <div className="flex flex-col gap-2">
+          <button 
+            onClick={() => onApply(action, zone?.id || '', fact.id)}
+            disabled={disabled || isApplied}
+            className={cn(
+              "w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+              isApplied 
+                ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-default"
+                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:bg-slate-800"
+            )}
+          >
+            {isApplied ? <CheckCircle2 size={12} /> : <Play size={12} />}
+            {isApplied ? 'Applied' : 'Apply Action'}
+          </button>
+          <button 
+            onClick={() => onShowProof(fact)}
+            className="w-full py-1.5 bg-slate-800/50 hover:bg-slate-700 text-slate-400 text-[9px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 uppercase tracking-widest"
+          >
+            View Proof <ChevronRight size={12} />
+          </button>
+        </div>
       </div>
     </motion.div>
   );
@@ -102,9 +127,14 @@ interface DecisionCardProps {
   zones: ZoneState[];
   onShowProof: (fact: GroundedFact) => void;
   selectedFactId?: string;
+  onApply: (action: string, zoneId: string, factId: string) => void;
+  appliedFactIds: string[];
+  disabled: boolean;
 }
 
-export const DecisionCard: React.FC<DecisionCardProps> = ({ facts, zones, onShowProof, selectedFactId }) => {
+export const DecisionCard: React.FC<DecisionCardProps> = ({ 
+  facts, zones, onShowProof, selectedFactId, onApply, appliedFactIds, disabled 
+}) => {
   // Filter and sort recommendations
   const recommendations = facts
     .filter(f => f.predicate === 'Execute' && f.probability > 0.01)
@@ -169,6 +199,9 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({ facts, zones, onShow
             isPrimary={i === 0}
             onShowProof={onShowProof}
             isSelected={selectedFactId === fact.id}
+            onApply={onApply}
+            isApplied={appliedFactIds.includes(fact.id)}
+            disabled={disabled}
           />
         ))}
       </div>

@@ -398,113 +398,6 @@ const ScalingView: React.FC<{
   </div>
 );
 
-const PlayModeView: React.FC<{
-  zones: ZoneState[],
-  humanDecision: { action: string, zone: string } | null,
-  aiDecision: { action: string, zone: string } | null,
-  onHumanDecision: (action: string, zoneId: string) => void,
-  humanScore: number,
-  aiScore: number,
-  gamePhase: GamePhase,
-  onReset: () => void
-}> = ({ zones, humanDecision, aiDecision, onHumanDecision, humanScore, aiScore, gamePhase, onReset }) => (
-  <div className="space-y-6">
-    <TabHeader 
-      title="Tactical Engagement Mode" 
-      description="Test your strategic intuition against the TS-PHOL engine. Observe how the system's verifiable reasoning compares to human decision-making." 
-      icon={<Play size={20} />}
-    />
-
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-sm font-bold text-white">Operational Map</h3>
-            <div className="flex items-center gap-4">
-               <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                 <span className="text-[10px] font-mono text-slate-400 uppercase">Human</span>
-               </div>
-               <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                 <span className="text-[10px] font-mono text-slate-400 uppercase">AI</span>
-               </div>
-            </div>
-          </div>
-          <MapGrid 
-            zones={zones} 
-            highlightedZone={null} 
-            onEditZone={() => {}} 
-          />
-        </div>
-
-        <HumanCommander 
-          zones={zones} 
-          onDecision={onHumanDecision} 
-          currentDecision={humanDecision} 
-        />
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Engagement Results</h3>
-          <div className="space-y-8">
-            <div className="space-y-3">
-              <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold text-indigo-400 uppercase">Human Commander</span>
-                <span className="text-2xl font-mono font-bold text-white">{humanScore}</span>
-              </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div 
-                  className="h-full bg-indigo-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, humanScore * 5)}%` }}
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between items-end">
-                <span className="text-[10px] font-bold text-emerald-400 uppercase">TS-PHOL AI</span>
-                <span className="text-2xl font-mono font-bold text-white">{aiScore}</span>
-              </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <motion.div 
-                  className="h-full bg-emerald-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, aiScore * 5)}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="pt-4 space-y-4">
-              {aiDecision && (
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2">
-                  <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">AI Decision</div>
-                  <div className="text-sm font-bold text-white">{aiDecision.action} @ {zones.find(z => z.id === aiDecision.zone)?.name}</div>
-                </div>
-              )}
-              {humanDecision && (
-                <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl space-y-2">
-                  <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Human Decision</div>
-                  <div className="text-sm font-bold text-white">{humanDecision.action} @ {zones.find(z => z.id === humanDecision.zone)?.name}</div>
-                </div>
-              )}
-            </div>
-
-            <button 
-              onClick={onReset}
-              className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold uppercase rounded-xl transition-all flex items-center justify-center gap-2"
-            >
-              <RefreshCw size={14} /> RESET MATCH
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
 const TurnChangeReport: React.FC<{ report: TurnReport | null }> = ({ report }) => {
   if (!report) return null;
   return (
@@ -550,15 +443,16 @@ const RoundSummaryModal: React.FC<{ report: TurnReport | null, onClose: () => vo
         
         <div className="flex items-center gap-4 mb-8">
           <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
-            <Trophy size={32} />
+            <Activity size={32} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-white">Round {report.turn} Summary</h2>
+            <h2 className="text-2xl font-bold text-white">Operational Outcome: Turn {report.turn}</h2>
             <p className="text-slate-400 text-sm">{report.summary}</p>
           </div>
         </div>
 
         <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Environmental Drift & Intel Updates</div>
           {report.changes.map((change, i) => (
             <div key={i} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 flex gap-4">
               <div className={cn(
@@ -583,13 +477,18 @@ const RoundSummaryModal: React.FC<{ report: TurnReport | null, onClose: () => vo
               </div>
             </div>
           ))}
+          {report.changes.length === 0 && (
+            <div className="text-xs text-slate-500 italic p-4 bg-slate-800/30 rounded-xl border border-slate-800/50">
+              No significant environmental changes detected this turn.
+            </div>
+          )}
         </div>
 
         <button 
           onClick={onClose}
           className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
         >
-          Continue to Turn {report.turn + 1} <ChevronRight size={18} />
+          Proceed to Turn {report.turn + 1} <ChevronRight size={18} />
         </button>
       </motion.div>
     </div>
@@ -636,89 +535,6 @@ const MLSignalsEditor: React.FC<{ zones: ZoneState[], onUpdate: (id: string, p_a
     </div>
   </div>
 );
-
-const HumanCommander: React.FC<{ 
-  zones: ZoneState[], 
-  onDecision: (action: string, zoneId: string) => void,
-  currentDecision: { action: string, zone: string } | null
-}> = ({ zones, onDecision, currentDecision }) => {
-  const [selectedZone, setSelectedZone] = useState<string>(zones[0]?.id || '');
-  const [selectedAction, setSelectedAction] = useState<string>('Defend');
-
-  return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400">
-          <User size={24} />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-white">Human Commander</h3>
-          <p className="text-[10px] text-slate-500 uppercase tracking-widest">Manual Strategic Input</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Zone</label>
-            <select 
-              value={selectedZone}
-              onChange={(e) => setSelectedZone(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              {zones.map(z => (
-                <option key={z.id} value={z.id}>{z.name} ({z.id})</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Action</label>
-            <div className="flex gap-2">
-              {['Attack', 'Defend', 'Reinforce', 'Hold'].map(action => (
-                <button
-                  key={action}
-                  onClick={() => setSelectedAction(action)}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg text-[10px] font-bold uppercase transition-all",
-                    selectedAction === action ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                  )}
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <button 
-          onClick={() => onDecision(selectedAction, selectedZone)}
-          disabled={!!currentDecision}
-          className={cn(
-            "w-full py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-            currentDecision 
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default" 
-              : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-          )}
-        >
-          {currentDecision ? (
-            <><CheckCircle2 size={16} /> Order Confirmed</>
-          ) : (
-            <><Target size={16} /> Commit Strategy</>
-          )}
-        </button>
-
-        {currentDecision && (
-          <div className="p-3 bg-slate-950/50 rounded-lg border border-slate-800 flex items-center justify-between">
-            <span className="text-[10px] text-slate-500 uppercase font-mono">Current Order:</span>
-            <span className="text-[10px] font-bold text-indigo-400 uppercase">
-              {currentDecision.action} @ {zones.find(z => z.id === currentDecision.zone)?.name}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const InteractiveProof: React.FC<{ 
   fact: GroundedFact | null, 
@@ -866,6 +682,7 @@ export default function App() {
     turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
     runInference,
+    applyRecommendation,
     updateZoneML,
     hypotheses, proposeHypothesis, acceptHypothesis, rejectHypothesis,
     runBenchmark
@@ -878,11 +695,8 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>([]);
 
   // Game Mode State
-  const [gamePhase, setGamePhase] = useState<GamePhase>('awaiting_human');
-  const [humanScore, setHumanScore] = useState(0);
-  const [aiScore, setAiScore] = useState(0);
-  const [humanDecision, setHumanDecision] = useState<{ action: string, zone: string } | null>(null);
-  const [aiDecision, setAiDecision] = useState<{ action: string, zone: string } | null>(null);
+  const [gamePhase, setGamePhase] = useState<GamePhase>('awaiting_inference');
+  const [appliedFactIds, setAppliedFactIds] = useState<string[]>([]);
   const [scalingExplanation, setScalingExplanation] = useState<ScalingExplanation | null>(null);
   const [ruleErrors, setRuleErrors] = useState<string[]>([]);
   const [showRoundSummary, setShowRoundSummary] = useState(false);
@@ -906,16 +720,13 @@ export default function App() {
     setGamePhase('ai_evaluating');
     const result = await runInference();
     if (result) {
-      const { facts, bestDecision } = result;
+      const { facts } = result;
       setInferredFacts(facts);
-      if (bestDecision) {
-        setAiDecision({ action: bestDecision.args[0], zone: bestDecision.args[1] });
-      }
-      setGamePhase('turn_result');
+      setGamePhase('reviewing_recommendations');
       setIsStale(false);
       addLog(`Inference complete. ${facts.length} facts generated.`);
     } else {
-      setGamePhase('awaiting_human');
+      setGamePhase('awaiting_inference');
     }
   };
 
@@ -924,9 +735,38 @@ export default function App() {
     setActiveTab('proof');
   };
 
-  const handleHumanDecision = (action: string, zoneId: string) => {
-    setHumanDecision({ action, zone: zoneId });
-    addLog(`Human order set: ${action} in ${zoneId}.`);
+  const handleApplyRecommendation = (action: string, zoneId: string, factId: string) => {
+    if (appliedFactIds.includes(factId)) return;
+    applyRecommendation(action, zoneId);
+    setAppliedFactIds(prev => [...prev, factId]);
+    addLog(`Applied recommendation: ${action} in ${zoneId}.`);
+  };
+
+  const handleReset = () => {
+    setAppliedFactIds([]);
+    setInferredFacts([]);
+    setSelectedFact(null);
+    setHighlightedZone(null);
+    setGamePhase('awaiting_inference');
+    resetSession();
+    addLog("Session reset. Map regenerated.");
+  };
+
+  const handleAdvanceTurn = () => {
+    if (appliedFactIds.length === 0) {
+      addLog("At least one recommendation must be applied before advancing.");
+      return;
+    }
+    
+    const report = advanceTurn();
+    setShowRoundSummary(true);
+    
+    // Reset for next turn
+    setAppliedFactIds([]);
+    setInferredFacts([]);
+    setSelectedFact(null);
+    setHighlightedZone(null);
+    setGamePhase('awaiting_inference');
   };
 
   const saveScenario = () => {
@@ -976,31 +816,6 @@ export default function App() {
     });
   };
 
-  const handleAdvanceTurn = () => {
-    if (!humanDecision || !aiDecision) return;
-    
-    setGamePhase('ready_next');
-    const report = advanceTurn(humanDecision, aiDecision);
-    
-    // Update scores
-    if (report.victor === 'human') setHumanScore(s => s + 1);
-    else if (report.victor === 'ai') setAiScore(s => s + 1);
-    else if (report.victor === 'draw') {
-      setHumanScore(s => s + 1);
-      setAiScore(s => s + 1);
-    }
-    
-    setShowRoundSummary(true);
-    
-    // Reset for next turn
-    setHumanDecision(null);
-    setAiDecision(null);
-    setInferredFacts([]);
-    setSelectedFact(null);
-    setHighlightedZone(null);
-    setGamePhase('awaiting_human');
-  };
-
   // --- Render Helpers ---
 
   const renderTabContent = () => {
@@ -1010,7 +825,7 @@ export default function App() {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <TabHeader 
               title="Operational Theater" 
-              description="Configure the tactical environment and issue orders. The TS-PHOL engine will evaluate your strategy against its own logical recommendations." 
+              description="Analyze tactical recommendations and apply strategic actions. The TS-PHOL engine provides verifiable guidance for battlefield management." 
               icon={<Target size={20} />}
             />
             
@@ -1019,14 +834,14 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <div className={cn(
                     "w-2.5 h-2.5 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.5)]",
-                    gamePhase === 'awaiting_human' ? "bg-amber-500 shadow-amber-500/50" :
+                    gamePhase === 'awaiting_inference' ? "bg-amber-500 shadow-amber-500/50" :
                     gamePhase === 'ai_evaluating' ? "bg-indigo-500 shadow-indigo-500/50 animate-pulse" :
-                    gamePhase === 'turn_result' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-500"
+                    gamePhase === 'reviewing_recommendations' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-500"
                   )} />
                   <span className="text-[11px] font-bold text-white uppercase tracking-[0.15em]">
-                    {gamePhase === 'awaiting_human' ? 'Awaiting Human Order' :
+                    {gamePhase === 'awaiting_inference' ? 'Awaiting Intelligence Run' :
                      gamePhase === 'ai_evaluating' ? 'AI Evaluating Strategy' :
-                     gamePhase === 'turn_result' ? 'Turn Result Analyzed' : 'Ready Next Turn'}
+                     gamePhase === 'reviewing_recommendations' ? 'Reviewing Recommendations' : 'Turn Result Analyzed'}
                   </span>
                 </div>
                 <div className="h-4 w-[1px] bg-slate-800" />
@@ -1036,24 +851,34 @@ export default function App() {
                     <span className="text-xs font-bold text-white">{turn}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[8px] font-mono text-slate-500 uppercase">Human Score</span>
-                    <span className="text-xs font-bold text-indigo-400">{humanScore}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[8px] font-mono text-slate-500 uppercase">AI Score</span>
-                    <span className="text-xs font-bold text-emerald-400">{aiScore}</span>
+                    <span className="text-[8px] font-mono text-slate-500 uppercase">Applied Actions</span>
+                    <span className="text-xs font-bold text-indigo-400">{appliedFactIds.length}</span>
                   </div>
                 </div>
               </div>
 
-              {gamePhase === 'turn_result' && (
+              <div className="flex items-center gap-3">
                 <button 
-                  onClick={handleAdvanceTurn}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg shadow-emerald-500/20"
+                  onClick={handleReset}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all"
                 >
-                  <ChevronRight size={14} /> Next Turn
+                  <RefreshCw size={14} /> Reset Session
                 </button>
-              )}
+                {gamePhase === 'reviewing_recommendations' && (
+                  <button 
+                    onClick={handleAdvanceTurn}
+                    disabled={appliedFactIds.length === 0}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg",
+                      appliedFactIds.length > 0 
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20" 
+                        : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    )}
+                  >
+                    <ChevronRight size={14} /> Next Turn
+                  </button>
+                )}
+              </div>
             </div>
 
             <TurnChangeReport report={lastTurnReport} />
@@ -1067,14 +892,14 @@ export default function App() {
                     value={numZones} 
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="w-24 accent-indigo-500"
-                    disabled={gamePhase !== 'awaiting_human'}
+                    disabled={gamePhase !== 'awaiting_inference'}
                   />
                   <input 
                     type="number" min="2" max="12"
                     value={numZones} 
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="bg-slate-800 border border-slate-700 text-xs font-mono text-white rounded w-12 text-center"
-                    disabled={gamePhase !== 'awaiting_human'}
+                    disabled={gamePhase !== 'awaiting_inference'}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -1083,13 +908,13 @@ export default function App() {
                     value={seed} 
                     onChange={e => setSeed(e.target.value)}
                     className="bg-transparent border-none text-xs font-mono text-white focus:ring-0 w-24"
-                    disabled={gamePhase !== 'awaiting_human'}
+                    disabled={gamePhase !== 'awaiting_inference'}
                   />
                   <button 
                     onClick={() => initZones(numZones)} 
                     className="text-slate-500 hover:text-white transition-colors disabled:opacity-30" 
                     title="Regenerate Map"
-                    disabled={gamePhase !== 'awaiting_human'}
+                    disabled={gamePhase !== 'awaiting_inference'}
                   >
                     <RefreshCw size={14} />
                   </button>
@@ -1112,23 +937,16 @@ export default function App() {
               onEditZone={(updated) => setZones(zones.map(z => z.id === updated.id ? updated : z))} 
             />
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-4">
-                <HumanCommander 
-                  zones={zones} 
-                  onDecision={handleHumanDecision} 
-                  currentDecision={humanDecision} 
-                />
-              </div>
-
-              <div className="lg:col-span-8">
-                <DecisionCard 
-                  facts={inferredFacts} 
-                  zones={zones}
-                  onShowProof={handleShowProof}
-                  selectedFactId={selectedFact?.id}
-                />
-              </div>
+            <div className="w-full">
+              <DecisionCard 
+                facts={inferredFacts} 
+                zones={zones}
+                onShowProof={handleShowProof}
+                selectedFactId={selectedFact?.id}
+                onApply={handleApplyRecommendation}
+                appliedFactIds={appliedFactIds}
+                disabled={gamePhase !== 'reviewing_recommendations'}
+              />
             </div>
           </div>
         );
@@ -1297,51 +1115,75 @@ export default function App() {
           </div>
         );
       case 'proof':
+        const topRecs = inferredFacts
+          .filter(f => f.predicate === 'Execute' && f.probability > 0.01)
+          .sort((a, b) => b.probability - a.probability)
+          .slice(0, 3);
+
         return (
-          <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="col-span-12 lg:col-span-4 space-y-6">
-              <TabHeader 
-                title="Inferred Facts" 
-                description="The complete set of grounded facts derived by the engine. Select a fact to view its logical proof artifact." 
-                icon={<Terminal size={20} />}
-              />
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Fact Base</h3>
-                  <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">{inferredFacts.length} TOTAL</span>
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <TabHeader 
+              title="Logical Proof Artifacts" 
+              description="Inspect the symbolic derivation chains for the top recommendations. TS-PHOL guarantees that every action is logically grounded in tactical signals." 
+              icon={<Network size={20} />}
+            />
+            
+            <div className="grid grid-cols-12 gap-6">
+              <div className="col-span-12 lg:col-span-4 space-y-4">
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Top Recommendations</h3>
+                  <div className="space-y-2">
+                    {topRecs.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setSelectedFact(f)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group",
+                          selectedFact?.id === f.id ? "bg-indigo-600/20 border-indigo-500/50" : "bg-slate-800/30 border-slate-700/50 hover:border-slate-600"
+                        )}
+                      >
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs font-mono font-bold text-white group-hover:text-indigo-400 transition-colors">{f.predicate}({f.args.join(', ')})</span>
+                          <span className="text-[9px] font-mono text-slate-500">{(f.probability * 100).toFixed(0)}% Confidence</span>
+                        </div>
+                        <ChevronRight size={14} className={cn("transition-transform", selectedFact?.id === f.id ? "translate-x-1" : "opacity-0 group-hover:opacity-100")} />
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                  {inferredFacts.map(f => (
-                    <button
-                      key={f.id}
-                      onClick={() => setSelectedFact(f)}
-                      className={cn(
-                        "w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between group",
-                        selectedFact?.id === f.id ? "bg-indigo-600/20 border-indigo-500/50" : "bg-slate-800/30 border-slate-700/50 hover:border-slate-600"
-                      )}
-                    >
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs font-mono font-bold text-white group-hover:text-indigo-400 transition-colors">{f.predicate}</span>
-                        <span className="text-[9px] font-mono text-slate-500">({f.args.join(', ')})</span>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className="text-[10px] font-mono font-bold text-slate-400">{(f.probability * 100).toFixed(0)}%</span>
-                        <span className="text-[8px] font-mono text-slate-600 uppercase">STRATUM {f.stratum}</span>
-                      </div>
-                    </button>
-                  ))}
+
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">All Inferred Facts</h3>
+                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">{inferredFacts.length}</span>
+                  </div>
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {inferredFacts.map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setSelectedFact(f)}
+                        className={cn(
+                          "w-full text-left px-3 py-2 rounded-lg text-[10px] font-mono transition-all",
+                          selectedFact?.id === f.id ? "bg-indigo-600/10 text-indigo-400" : "text-slate-500 hover:text-slate-300"
+                        )}
+                      >
+                        {f.predicate}({f.args.join(', ')})
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="col-span-12 lg:col-span-8">
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-full min-h-[600px] overflow-hidden">
-                <InteractiveProof 
-                  fact={selectedFact} 
-                  zones={zones} 
-                  onHighlight={setHighlightedZone} 
-                  onSelectFact={setSelectedFact}
-                  selectedFactId={selectedFact?.id}
-                />
+
+              <div className="col-span-12 lg:col-span-8">
+                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-full min-h-[600px] overflow-hidden">
+                  <InteractiveProof 
+                    fact={selectedFact || topRecs[0] || null} 
+                    zones={zones} 
+                    onHighlight={setHighlightedZone} 
+                    onSelectFact={setSelectedFact}
+                    selectedFactId={selectedFact?.id || topRecs[0]?.id}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1393,16 +1235,16 @@ export default function App() {
               )}
               <button 
                 onClick={handleInference}
-                disabled={isInferring || gamePhase === 'ai_evaluating'}
+                disabled={isInferring || gamePhase !== 'awaiting_inference'}
                 className={cn(
                   "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
-                  isInferring || gamePhase === 'ai_evaluating'
+                  isInferring || gamePhase !== 'awaiting_inference'
                     ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
                     : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
                 )}
               >
-                {isInferring || gamePhase === 'ai_evaluating' ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
-                <span>{isInferring || gamePhase === 'ai_evaluating' ? 'Evaluating...' : 'Run Inference'}</span>
+                {isInferring ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
+                <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
               </button>
             </div>
           </div>
