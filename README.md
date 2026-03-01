@@ -1,20 +1,29 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# TS-PHOL Strategy Workbench
 
-# Run and deploy your AI Studio app
+## What problem this solves
+Adversarial Reasoning (AR) systems often face a tradeoff between **expressiveness** (how complex the rules can be) and **tractability** (how fast the system can reason). Standard Higher-Order Logics are often undecidable or exponential in complexity.
 
-This contains everything you need to run your app locally.
+**TS-PHOL** (Tractable Stratified Probabilistic Higher-Order Logic) solves this by:
+1. **Enforcing PTIME Complexity**: Using a restricted logical fragment that guarantees polynomial-time inference.
+2. **Neuro-Symbolic Composition**: Seamlessly combining low-level Machine Learning (ML) probabilistic signals with high-level symbolic rules.
+3. **Machine-Checkable Proofs**: Generating structured, low-burden logical explanations for every decision, ensuring human trust and auditability.
 
-View your app in AI Studio: https://ai.studio/apps/b04c259d-e146-4bc3-a53c-85f8ef2c71bc
+## 5-Minute Walkthrough
+1. **Configure Scenario**: Go to the **Scenario** tab. Adjust the number of zones or edit specific zone parameters (units, supply, fog) by clicking on the map cards.
+2. **Inspect ML Signals**: Switch to the **ML Signals** tab to see raw probability predictions from the neural layer.
+3. **Run Inference**: Click the **Run Inference** button in the header. Watch the progress bar as the system moves from World State to Final Decision.
+4. **Inspect Proof**: Go to the **Proof** tab. Select a decision to see its derivation tree. Hover over nodes to see which map zones triggered specific rules.
+5. **What-If Analysis**: In the **Inference** tab, adjust the `p_attack` threshold slider to see how the AI's tactical recommendation changes under different risk tolerances.
 
-## Run Locally
+## Glossary
+- **Stratum**: A logical layer in the reasoning hierarchy. Higher strata depend on lower ones, preventing cycles and ensuring tractability.
+- **Grounded Fact**: A concrete instance of a predicate where variables are replaced by actual entities (e.g., `Vulnerable(Zone_1)`).
+- **PTIME**: Polynomial Time. A complexity class ensuring the system remains fast even as the problem space (number of zones) grows.
+- **Range Restriction**: A safety property ensuring every variable in a rule's head also appears in its body, preventing the creation of infinite new entities.
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Maintainability
+The project is split into:
+- `src/engine/tsphol.ts`: Core inference and validation logic.
+- `src/hooks/useInference.ts`: State management and inference orchestration.
+- `src/components/`: Reusable UI components (Map, Decision Card, Onboarding).
+- `src/types.ts`: Centralized type definitions.
