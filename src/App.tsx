@@ -4,14 +4,14 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Shield, 
-  Cpu, 
-  Activity, 
-  Layers, 
-  FileText, 
-  Play, 
-  RefreshCw, 
+import {
+  Shield,
+  Cpu,
+  Activity,
+  Layers,
+  FileText,
+  Play,
+  RefreshCw,
   AlertCircle,
   CheckCircle2,
   Database,
@@ -35,20 +35,22 @@ import {
   X,
   BrainCircuit
 } from 'lucide-react';
-import { 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  AreaChart, 
+import {
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
   Area,
   LineChart,
   Line,
   BarChart,
   Bar
 } from 'recharts';
+import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
+import ReactMarkdown from 'react-markdown';
 import { cn } from './lib/utils';
 import { useInference } from './hooks/useInference';
 import { Onboarding } from './components/Onboarding';
@@ -87,7 +89,7 @@ const ExecutionFlow: React.FC<{ currentStep: string }> = ({ currentStep }) => {
           </div>
           {i < steps.length - 1 && (
             <div className="flex-1 h-[2px] bg-slate-800 mx-4 relative overflow-hidden">
-              <motion.div 
+              <motion.div
                 className="absolute inset-0 bg-indigo-500"
                 initial={{ x: '-100%' }}
                 animate={currentStep === step.id ? { x: '0%' } : { x: '-100%' }}
@@ -101,17 +103,21 @@ const ExecutionFlow: React.FC<{ currentStep: string }> = ({ currentStep }) => {
   );
 };
 
-const HypothesisGeneratorView: React.FC<{ 
-  hypotheses: LogicRule[], 
+const HypothesisGeneratorView: React.FC<{
+  hypotheses: LogicRule[],
   onPropose: (llm: boolean) => void,
   onAccept: (h: LogicRule) => void,
   onReject: (h: LogicRule) => void,
-  isGenerating: boolean
-}> = ({ hypotheses, onPropose, onAccept, onReject, isGenerating }) => (
+  isGenerating: boolean,
+  humanIntent: string,
+  onIntentChange: (val: string) => void,
+  onProposeIntent: () => void,
+  isConvertingIntent: boolean
+}> = ({ hypotheses, onPropose, onAccept, onReject, isGenerating, humanIntent, onIntentChange, onProposeIntent, isConvertingIntent }) => (
   <div className="space-y-6">
-    <TabHeader 
-      title="LLoM Hypothesis Generator" 
-      description="Simulate Large Language Model behavior by proposing candidate logic rules based on current tactical patterns. These rules must be validated before execution." 
+    <TabHeader
+      title="LLoM Hypothesis Generator"
+      description="Simulate Large Language Model behavior by proposing candidate logic rules based on current tactical patterns. These rules must be validated before execution."
       icon={<BrainCircuit size={20} />}
     />
 
@@ -121,18 +127,42 @@ const HypothesisGeneratorView: React.FC<{
           <Zap size={16} className="text-amber-400" /> Generation Controls
         </h3>
         <p className="text-xs text-slate-500 leading-relaxed">
-          Trigger the LLoM layer to analyze ML signals and propose new symbolic rules.
+          Trigger the LLoM layer to analyze ML signals or enter your strategic intent to propose new symbolic rules.
         </p>
-        <div className="flex flex-col gap-3">
+
+        <div className="space-y-3 pt-2">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Strategic Intent (Natural Language)</label>
+            <textarea
+              value={humanIntent}
+              onChange={(e) => onIntentChange(e.target.value)}
+              placeholder="e.g., If a zone is vulnerable and nearby enemy is strong, prioritize defense."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 min-h-[80px] resize-none"
+            />
+          </div>
+          <button
+            onClick={() => onProposeIntent()}
+            disabled={isGenerating || isConvertingIntent || !humanIntent.trim()}
+            className="w-full py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 text-[10px] font-bold rounded-xl border border-indigo-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isConvertingIntent ? (
+              <><RefreshCw size={14} className="animate-spin" /> CONVERTING...</>
+            ) : (
+              <><BrainCircuit size={14} /> CONVERT INTENT TO RULE</>
+            )}
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 pt-4 border-t border-slate-800/50">
           <div className="flex gap-3">
-            <button 
+            <button
               onClick={() => onPropose(false)}
               disabled={isGenerating}
               className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               <RefreshCw size={14} /> HEURISTIC PROPOSAL
             </button>
-            <button 
+            <button
               onClick={() => onPropose(true)}
               disabled={isGenerating}
               className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:bg-slate-800"
@@ -146,7 +176,7 @@ const HypothesisGeneratorView: React.FC<{
           </div>
           {isGenerating && (
             <p className="text-[10px] text-indigo-400 animate-pulse font-mono text-center">
-              Gemini is analyzing battlefield patterns...
+              Gemini is processing battlefield context...
             </p>
           )}
         </div>
@@ -187,9 +217,9 @@ const HypothesisGeneratorView: React.FC<{
 
 const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[] }> = ({ validation, rules }) => (
   <div className="space-y-6">
-    <TabHeader 
-      title="Structural Fragment Validator" 
-      description="TS-PHOL enforces strict structural constraints to guarantee polynomial-time inference and prevent logical paradoxes. Every rule is checked before the reasoning engine executes." 
+    <TabHeader
+      title="Structural Fragment Validator"
+      description="TS-PHOL enforces strict structural constraints to guarantee polynomial-time inference and prevent logical paradoxes. Every rule is checked before the reasoning engine executes."
       icon={<Shield size={20} />}
     />
 
@@ -197,16 +227,25 @@ const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[]
       <div className="lg:col-span-2 space-y-4">
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-sm font-bold text-white">Rule Validation Status</h3>
-            <div className={cn(
-              "px-3 py-1 rounded-full text-[10px] font-bold font-mono flex items-center gap-2",
-              validation.valid ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-            )}>
-              {validation.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-              {validation.valid ? "ALL RULES VALID" : "VALIDATION ERRORS DETECTED"}
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              Rule Validation Status
+            </h3>
+            <div className="flex items-center gap-4">
+              <ExplainButton
+                context="ruleset"
+                data={{ rules }}
+                className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 scale-90 origin-right"
+              />
+              <div className={cn(
+                "px-3 py-1 rounded-full text-[10px] font-bold font-mono flex items-center gap-2",
+                validation.valid ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+              )}>
+                {validation.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                {validation.valid ? "ALL RULES VALID" : "VALIDATION ERRORS DETECTED"}
+              </div>
             </div>
           </div>
-          
+
           <div className="space-y-3">
             {rules.map(rule => (
               <div key={rule.id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl flex items-center justify-between group">
@@ -218,8 +257,8 @@ const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[]
                   <p className="text-[10px] text-slate-500">{rule.description}</p>
                 </div>
                 <div className="flex items-center gap-3">
-                   <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                   <span className="text-[9px] font-mono text-emerald-500 font-bold uppercase">Passed</span>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[9px] font-mono text-emerald-500 font-bold uppercase">Passed</span>
                 </div>
               </div>
             ))}
@@ -227,11 +266,19 @@ const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[]
         </div>
 
         {!validation.valid && (
-          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 animate-in shake duration-500">
-            <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2 mb-4">
-              <AlertCircle size={16} /> Critical Violations
-            </h3>
-            <div className="space-y-2">
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 animate-in shake duration-500 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-3xl rounded-full pointer-events-none" />
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
+                <AlertCircle size={16} /> Critical Violations
+              </h3>
+              <ExplainButton
+                context="validator"
+                data={{ errors: validation.errors, rules }}
+                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30"
+              />
+            </div>
+            <div className="space-y-2 relative z-10">
               {validation.errors.map((err, i) => (
                 <div key={i} className="flex items-start gap-3 text-xs text-rose-300 font-mono">
                   <span className="text-rose-500 mt-0.5">▶</span>
@@ -263,7 +310,7 @@ const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[]
             ))}
           </div>
         </div>
-        
+
         <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6">
           <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Why Validate?</h3>
           <p className="text-[10px] text-slate-400 leading-relaxed">
@@ -275,101 +322,196 @@ const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[]
   </div>
 );
 
-const ScalingView: React.FC<{ 
-  metrics: ScalingMetric[], 
+const ScalingView: React.FC<{
+  metrics: ScalingMetric[],
   onRunBenchmark: () => void,
-  explanation: ScalingExplanation | null
-}> = ({ metrics, onRunBenchmark, explanation }) => (
+  explanation: ScalingExplanation | null,
+  maxZones: number,
+  setMaxZones: (val: number) => void,
+  maxArity: number,
+  setMaxArity: (val: number) => void,
+  onExplain: () => void,
+  isExplaining: boolean,
+  onResetBenchmark: () => void
+}> = ({ metrics, onRunBenchmark, explanation, maxZones, setMaxZones, maxArity, setMaxArity, onExplain, isExplaining, onResetBenchmark }) => (
   <div className="space-y-6">
-    <TabHeader 
-      title="Polynomial Scaling Metrics" 
-      description="Observe how the TS-PHOL engine scales as the operational theater grows. The complexity is bounded by the predicate arity, ensuring predictable performance." 
+    <TabHeader
+      title="Polynomial Scaling Metrics"
+      description="Observe how the TS-PHOL engine scales as the operational theater grows. The complexity is bounded by the predicate arity, ensuring predictable performance."
       icon={<BarChart3 size={20} />}
     />
 
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-sm font-bold text-white">Inference Runtime (ms) vs. Zone Count</h3>
-            <button 
-              onClick={onRunBenchmark}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-xl transition-all flex items-center gap-2"
-            >
-              <Play size={12} /> RUN FULL BENCHMARK
-            </button>
-          </div>
-          
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={metrics}>
-                <defs>
-                  <linearGradient id="colorRuntime" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="numZones" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
-                  itemStyle={{ color: '#6366f1', fontSize: '10px', fontWeight: 'bold' }}
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-white">Inference Runtime (ms) vs. Zone Count</h3>
+              <p className="text-[10px] text-slate-500 mt-1">Benchmarking O(N^k) polynomial complexity</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] font-mono text-slate-500 uppercase">Max Zones</span>
+                <input
+                  type="number"
+                  value={maxZones}
+                  onChange={(e) => setMaxZones(parseInt(e.target.value))}
+                  className="w-12 bg-transparent border-none text-xs font-mono text-white focus:ring-0 text-center"
                 />
-                <Area type="monotone" dataKey="runtime" stroke="#6366f1" fillOpacity={1} fill="url(#colorRuntime)" strokeWidth={2} />
-              </AreaChart>
+              </div>
+              <button
+                onClick={onRunBenchmark}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+              >
+                <Play size={12} /> RUN BENCHMARK
+              </button>
+              <button
+                onClick={onResetBenchmark}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold rounded-xl transition-all flex items-center gap-2"
+                title="Clear Plot History"
+              >
+                <RefreshCw size={12} /> RESET
+              </button>
+            </div>
+          </div>
+
+          <div className="h-[500px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              {metrics.length === 0 ? (
+                <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center text-slate-500 bg-slate-950/50 border border-slate-800/50 rounded-xl border-dashed">
+                  <BarChart3 size={48} className="mb-4 text-slate-700" />
+                  <p className="text-sm font-medium">No benchmark data available.</p>
+                  <p className="text-xs text-slate-600 mt-1">Click "Run Benchmark" to execute the polynomial scaling tests.</p>
+                </div>
+              ) : (
+                <LineChart margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="numZones"
+                    type="number"
+                    domain={['dataMin', 'dataMax']}
+                    allowDuplicatedCategory={false}
+                    stroke="#64748b"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    label={{ value: 'Zone Count (N)', position: 'insideBottom', offset: -15, fontSize: 10, fill: '#475569' }}
+                  />
+                  <YAxis
+                    dataKey="runtime"
+                    stroke="#64748b"
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    label={{ value: 'Ms', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#475569' }}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                    itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
+                    labelStyle={{ color: '#94a3b8', fontSize: '10px', marginBottom: '4px' }}
+                  />
+                  {Array.from(new Set(metrics.map(m => m.runId))).map((runId, idx) => {
+                    const runData = metrics.filter(m => m.runId === runId);
+                    // Generate colors so previous runs fade or use distinct hues
+                    const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+                    const color = colors[idx % colors.length];
+                    const isLatest = idx === new Set(metrics.map(m => m.runId)).size - 1;
+                    return (
+                      <Line
+                        key={runId}
+                        data={runData}
+                        type="monotone"
+                        dataKey="runtime"
+                        name={runId || 'Run'}
+                        stroke={color}
+                        strokeWidth={isLatest ? 3 : 1.5}
+                        strokeOpacity={isLatest ? 1 : 0.6}
+                        dot={{ r: isLatest ? 4 : 2, fill: '#0f172a', strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    );
+                  })}
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
 
-        {explanation && (
-          <div className="bg-indigo-600/10 border border-indigo-500/30 rounded-2xl p-6 animate-in slide-in-from-bottom-4 duration-500">
-            <h3 className="text-sm font-bold text-indigo-400 flex items-center gap-2 mb-4">
+        <div className="bg-indigo-600/10 border border-indigo-500/30 rounded-2xl p-6 animate-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-indigo-400 flex items-center gap-2">
               <Info size={16} /> Performance Interpretation
             </h3>
+            <button
+              onClick={onExplain}
+              disabled={isExplaining || metrics.length === 0}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {isExplaining ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
+              EXPLAIN SCALING WITH AI
+            </button>
+          </div>
+
+          {explanation ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <div className="text-[10px] font-bold text-slate-500 uppercase">Runtime Trend</div>
-                <p className="text-xs text-slate-300 leading-relaxed">{explanation.runtimeTrend}</p>
+                <div className="text-xs text-slate-300 leading-relaxed max-w-none prose prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5"><ReactMarkdown>{explanation.runtimeTrend}</ReactMarkdown></div>
               </div>
               <div className="space-y-2">
                 <div className="text-[10px] font-bold text-slate-500 uppercase">Complexity Bound</div>
-                <p className="text-xs text-slate-300 leading-relaxed">{explanation.complexityTrend}</p>
+                <div className="text-xs text-slate-300 leading-relaxed max-w-none prose prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5"><ReactMarkdown>{explanation.complexityTrend}</ReactMarkdown></div>
               </div>
               <div className="md:col-span-2 pt-2 border-t border-indigo-500/20">
-                <p className="text-[11px] text-indigo-300 italic">{explanation.impactNote}</p>
+                <div className="text-[11px] text-indigo-300 italic font-serif leading-relaxed max-w-none prose prose-invert prose-p:my-1">
+                  <ReactMarkdown>{explanation.impactNote}</ReactMarkdown>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-6">
+              <p className="text-xs text-slate-500 italic">Run a benchmark and click "Explain" for an automated performance audit.</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">How to Interpret Results</h3>
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6 font-mono">Benchmark Controls</h3>
           <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Max Arity (k)</span>
+                <span className="text-[10px] font-mono text-indigo-400 font-bold">O(N^{maxArity})</span>
+              </div>
+              <input
+                type="range" min="1" max="4" step="1"
+                value={maxArity}
+                onChange={(e) => setMaxArity(parseInt(e.target.value))}
+                className="w-full accent-indigo-500 h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer"
+              />
+              <p className="text-[9px] text-slate-600 italic">Upper bound on predicate arguments. Higher arity improves expressiveness but slows scaling.</p>
+            </div>
+            <div className="h-[1px] bg-slate-800" />
             <div className="space-y-1">
               <div className="text-[10px] font-bold text-slate-300 uppercase">Tractability Confidence</div>
-              <p className="text-[10px] text-slate-500 leading-relaxed">A linear or quadratic curve confirms the engine is operating within the TS-PHOL fragment, guaranteeing it won't crash on large maps.</p>
-            </div>
-            <div className="space-y-1">
-              <div className="text-[10px] font-bold text-slate-300 uppercase">Explainability Complexity</div>
-              <p className="text-[10px] text-slate-500 leading-relaxed">Proof depth indicates how many logical steps the AI takes. Deeper proofs are more sophisticated but harder for humans to audit quickly.</p>
+              <p className="text-[10px] text-slate-500 leading-relaxed">A linear or quadratic curve confirms the engine is operating within the TS-PHOL fragment.</p>
             </div>
           </div>
         </div>
 
         <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6">Complexity Analysis</h3>
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-6 font-mono">Complexity Analysis</h3>
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <div className="text-[10px] font-bold text-slate-300 uppercase">Max Arity</div>
-                <div className="text-2xl font-mono font-bold text-white">2</div>
+                <div className="text-[10px] font-bold text-slate-300 uppercase">Current Arity</div>
+                <div className="text-2xl font-mono font-bold text-white">{maxArity}</div>
               </div>
               <div className="space-y-1 text-right">
                 <div className="text-[10px] font-bold text-slate-300 uppercase">Complexity</div>
-                <div className="text-lg font-mono font-bold text-indigo-400">O(N²)</div>
+                <div className="text-lg font-mono font-bold text-indigo-400">O(N{maxArity === 1 ? '' : maxArity === 2 ? '²' : maxArity === 3 ? '³' : '^' + maxArity})</div>
               </div>
             </div>
             <div className="h-[1px] bg-slate-800" />
@@ -398,10 +540,99 @@ const ScalingView: React.FC<{
   </div>
 );
 
+const ExplainButton: React.FC<{ context: string, data: any, className?: string }> = ({ context, data, className }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+
+  const handleExplain = async () => {
+    setIsGenerating(true);
+    setIsOpen(true);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      setExplanation("Error: GEMINI_API_KEY not found in environment.");
+      setIsGenerating(false);
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      let prompt = "";
+
+      if (context === 'ruleset') {
+        prompt = `
+          You are a tactical reasoning engine compiling a "Commander's Guide to Active Operational Rules".
+          Active Rules: ${JSON.stringify(data.rules.map((r: any) => ({ rule: r.head + ' <- ' + r.body.join(','), description: r.description })))}
+          Summarize what the AI is collectively looking for and how it determines its final actions in 3 readable paragraphs. Do not mention individual rule IDs, synthesize the strategy.
+        `;
+      } else if (context === 'validator') {
+        prompt = `
+          You are an expert logician analyzing TS-PHOL rule stratification and structural constraints.
+          Errors: ${JSON.stringify(data.errors)}
+          Rules: ${JSON.stringify(data.rules)}
+          Explain to the user exactly *why* their Datalog-style rules failed validation (e.g. cycle detected, strata error) in plain English and give concrete advice on how to fix it in 2 paragraphs.
+        `;
+      } else if (context === 'facts') {
+        prompt = `
+          You are an intelligence officer. Review all these facts just inferred by the logic engine.
+          Facts: ${JSON.stringify(data.facts.map((f: any) => f.predicate + '(' + f.args.join(',') + ') = ' + (f.probability * 100).toFixed(0) + '%'))}
+          Write a comprehensive 3 paragraph battlefield situation report summarizing the entire state of the map based solely on these derived facts. Highlight key clusters of Vulnerable/Reinforce/Execute facts.
+        `;
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+      setExplanation(response.text || "Failed to generate explanation.");
+    } catch (err) {
+      setExplanation("API Error: " + (err as Error).message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start w-full">
+      <button
+        onClick={handleExplain}
+        disabled={isGenerating}
+        className={cn("px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded-lg flex items-center gap-2 transition-all disabled:opacity-50", className)}
+      >
+        {isGenerating ? <RefreshCw size={12} className="animate-spin" /> : <Bot size={12} />}
+        {context === 'ruleset' ? 'Explain Strategy' : context === 'validator' ? 'Explain Error' : 'Explain Battlefield'}
+      </button>
+
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="mt-3 w-full p-4 bg-slate-950 border border-slate-800 rounded-xl"
+        >
+          <div className="flex items-center justify-between mb-3 border-b border-slate-800/50 pb-2">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <BrainCircuit size={12} className="text-indigo-400" /> AI Diagnostic
+            </h4>
+            <button onClick={() => setIsOpen(false)} className="text-slate-500 hover:text-white"><X size={12} /></button>
+          </div>
+          {isGenerating ? (
+            <p className="text-xs text-slate-500 animate-pulse">Analyzing context via LLM...</p>
+          ) : (
+            <div className="text-[11px] text-slate-300 leading-relaxed md-content max-w-none prose prose-invert prose-p:my-1.5 prose-headings:my-2 prose-ul:my-1 prose-li:my-0 pb-6 pr-4">
+              <ReactMarkdown>{explanation}</ReactMarkdown>
+            </div>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
 const TurnChangeReport: React.FC<{ report: TurnReport | null }> = ({ report }) => {
   if (!report) return null;
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, height: 0 }}
       animate={{ opacity: 1, height: 'auto' }}
       className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6"
@@ -426,124 +657,81 @@ const TurnChangeReport: React.FC<{ report: TurnReport | null }> = ({ report }) =
   );
 };
 
-const RoundSummaryModal: React.FC<{ report: TurnReport | null, onClose: () => void }> = ({ report, onClose }) => {
-  if (!report) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl relative overflow-hidden"
-      >
-        <div className="absolute top-0 right-0 p-6">
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-        </div>
-        
-        <div className="flex items-center gap-4 mb-8">
-          <div className="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center text-indigo-400">
-            <Activity size={32} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-white">Operational Outcome: Turn {report.turn}</h2>
-            <p className="text-slate-400 text-sm">{report.summary}</p>
-          </div>
-        </div>
 
-        <div className="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Environmental Drift & Intel Updates</div>
-          {report.changes.map((change, i) => (
-            <div key={i} className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 flex gap-4">
-              <div className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                change.type === 'reinforcement' ? "bg-rose-500/20 text-rose-400" : 
-                change.type === 'attrition' ? "bg-indigo-500/20 text-indigo-400" : 
-                change.type === 'combat' ? "bg-amber-500/20 text-amber-400" : "bg-slate-500/20 text-slate-400"
-              )}>
-                {change.type === 'reinforcement' ? <Flame size={20} /> : 
-                 change.type === 'attrition' ? <Shield size={20} /> : 
-                 change.type === 'combat' ? <Target size={20} /> : <Info size={20} />}
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-bold text-white uppercase tracking-wider">{change.zoneName}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">({change.zoneId})</span>
-                </div>
-                <p className="text-sm text-slate-300 mb-1">{change.description}</p>
-                {change.impact && (
-                  <p className="text-[11px] text-indigo-400 font-medium italic">Impact: {change.impact}</p>
-                )}
-              </div>
-            </div>
-          ))}
-          {report.changes.length === 0 && (
-            <div className="text-xs text-slate-500 italic p-4 bg-slate-800/30 rounded-xl border border-slate-800/50">
-              No significant environmental changes detected this turn.
-            </div>
-          )}
-        </div>
-
-        <button 
-          onClick={onClose}
-          className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
-        >
-          Proceed to Turn {report.turn + 1} <ChevronRight size={18} />
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-const MLSignalsEditor: React.FC<{ zones: ZoneState[], onUpdate: (id: string, p_attack: number, p_success: number) => void }> = ({ zones, onUpdate }) => (
-  <div className="space-y-4">
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {zones.map(z => (
-        <div key={z.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-white uppercase tracking-wider">{z.name}</span>
-            <span className="text-[10px] font-mono text-slate-500">{z.id}</span>
-          </div>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] uppercase font-bold">
-                <span className="text-rose-400">p_attack</span>
-                <span className="text-slate-400">{(z.p_attack * 100).toFixed(0)}%</span>
-              </div>
-              <input 
-                type="range" min="0" max="1" step="0.01" 
-                value={z.p_attack} 
-                onChange={e => onUpdate(z.id, parseFloat(e.target.value), z.p_success)}
-                className="w-full accent-rose-500"
-              />
-            </div>
-            <div className="space-y-1">
-              <div className="flex justify-between text-[10px] uppercase font-bold">
-                <span className="text-emerald-400">p_success</span>
-                <span className="text-slate-400">{(z.p_success * 100).toFixed(0)}%</span>
-              </div>
-              <input 
-                type="range" min="0" max="1" step="0.01" 
-                value={z.p_success} 
-                onChange={e => onUpdate(z.id, z.p_attack, parseFloat(e.target.value))}
-                className="w-full accent-emerald-500"
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-const InteractiveProof: React.FC<{ 
-  fact: GroundedFact | null, 
-  zones: ZoneState[], 
+const InteractiveProof: React.FC<{
+  fact: GroundedFact | null,
+  zones: ZoneState[],
   onHighlight: (zoneId: string | null) => void,
   onSelectFact: (f: GroundedFact) => void,
   selectedFactId?: string
 }> = ({ fact, zones, onHighlight, onSelectFact, selectedFactId }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explainError, setExplainError] = useState<string | null>(null);
+
+  const expandAll = () => {
+    if (!fact) return;
+    const allIds = new Set<string>();
+    const gather = (f: GroundedFact) => {
+      allIds.add(f.id);
+      f.childFacts.forEach(gather);
+    };
+    gather(fact);
+    setExpanded(allIds);
+  };
+
+  const collapseAll = () => {
+    setExpanded(new Set());
+  };
+
+
+  useEffect(() => {
+    setExplanation(null);
+    setExplainError(null);
+  }, [fact?.id]);
+
+  const explainFact = async () => {
+    if (!fact) return;
+    setIsExplaining(true);
+    setExplanation(null);
+    setExplainError(null);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      setExplainError("GEMINI_API_KEY not found in environment. Please add it to your .env file.");
+      setIsExplaining(false);
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `
+        You are a military tactics AI teacher explaining a decision from a probabilistic logic engine to a human commander.
+        
+        The fact being derived is: ${fact.predicate}(${fact.args.map(a => zones.find(z => z.id === a)?.name || a).join(', ')})
+        Confidence: ${(fact.probability * 100).toFixed(0)}%
+        Generated via Rule ID: ${fact.ruleId || 'Axiom'}
+        
+        Sub-conditions (child facts) that led to this:
+        ${fact.childFacts.length > 0 ? fact.childFacts.map(cf => `- ${cf.predicate}(${cf.args.join(', ')}): ${(cf.probability * 100).toFixed(0)}%`).join('\n') : 'None (Base Fact)'}
+        
+        Explain in under 3 concise sentences: 1) Why this recommendation was made intuitively, 2) How the confidence scores combine, and 3) What battlefield changes might invalidate this. Be strict on length.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+
+      setExplanation(response.text || "Explanation could not be generated.");
+    } catch (err) {
+      console.error("Gemini explainer failed:", err);
+      setExplainError("Failed to communicate with the Gemini API to generate an explanation.");
+    } finally {
+      setIsExplaining(false);
+    }
+  };
 
   const resolveName = (arg: string) => {
     const zone = zones.find(z => z.id === arg);
@@ -564,7 +752,7 @@ const InteractiveProof: React.FC<{
 
     return (
       <div key={f.id} className="ml-4 border-l border-slate-800 pl-4 py-1">
-        <div 
+        <div
           className={cn(
             "flex items-center gap-2 p-2 rounded-lg transition-colors cursor-pointer group",
             isSelected ? "bg-indigo-500/20 ring-1 ring-indigo-500/50" : "hover:bg-slate-800/50"
@@ -616,14 +804,56 @@ const InteractiveProof: React.FC<{
         <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-2">
           <Network size={14} /> Interactive Proof Explorer
         </h3>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-1 mr-4">
+            <button onClick={expandAll} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[9px] font-bold text-slate-300 rounded transition-colors uppercase">
+              Expand All
+            </button>
+            <button onClick={collapseAll} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[9px] font-bold text-slate-300 rounded transition-colors uppercase">
+              Collapse All
+            </button>
+          </div>
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded border border-emerald-400/20">
             PTIME VERIFIED
           </span>
         </div>
       </div>
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+      <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 mb-4">
         {renderNode(fact)}
+      </div>
+
+      <div className="bg-slate-950 border border-indigo-500/20 rounded-xl p-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full" />
+        <div className="flex items-center justify-between mb-3 relative z-10">
+          <h4 className="text-[10px] font-bold text-white uppercase flex items-center gap-1.5">
+            <BrainCircuit size={14} className="text-indigo-400" /> AI Teachable Moment
+          </h4>
+          <button
+            onClick={explainFact}
+            disabled={isExplaining}
+            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[9px] font-bold rounded flex items-center gap-1 uppercase transition-colors disabled:opacity-50"
+          >
+            {isExplaining ? <RefreshCw size={10} className="animate-spin" /> : <Bot size={10} />}
+            {isExplaining ? 'Thinking...' : 'Explain with Gemini'}
+          </button>
+        </div>
+
+        <div className="relative z-10">
+          {explanation ? (
+            <p className="text-[11px] text-slate-300 leading-relaxed border-l-2 border-indigo-500 pl-3">
+              {explanation}
+            </p>
+          ) : explainError ? (
+            <div className="text-[10px] text-rose-400 flex items-start gap-1.5 p-2 bg-rose-500/10 rounded border border-rose-500/20">
+              <AlertCircle size={12} className="shrink-0 mt-0.5" />
+              <p>{explainError}</p>
+            </div>
+          ) : (
+            <p className="text-[10px] text-slate-500 italic">
+              Click the explain button to get a natural-language breakdown of this derivation.
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -670,40 +900,66 @@ export default function App() {
     numZones, setNumZones,
     zones, setZones,
     rules, setRules,
-    validation, setValidation,
-    inferredFacts, setInferredFacts,
-    scalingMetrics, setScalingMetrics,
+    hypotheses, setHypotheses,
     isInferring, setIsInferring,
     isGeneratingHypothesis,
     isStale, setIsStale,
+    proposeHypothesis, acceptHypothesis, rejectHypothesis,
+    validation, setValidation,
+    inferredFacts,
+    scalingMetrics, setScalingMetrics,
+    runBenchmark,
+    initialHealth, currentHealth, healthDetails,
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,
     turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
-    runInference,
-    applyRecommendation,
-    updateZoneML,
-    hypotheses, proposeHypothesis, acceptHypothesis, rejectHypothesis,
-    runBenchmark
+    runInference, applyRecommendation, updateZoneML,
   } = useInference();
 
   // --- State ---
   const [activeTab, setActiveTab] = useState<TabType>('scenario');
+  const [isIntelligenceEnabled, setIsIntelligenceEnabled] = useState(true);
   const [selectedFact, setSelectedFact] = useState<GroundedFact | null>(null);
   const [highlightedZone, setHighlightedZone] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [humanIntent, setHumanIntent] = useState('');
 
   // Game Mode State
   const [gamePhase, setGamePhase] = useState<GamePhase>('awaiting_inference');
   const [appliedFactIds, setAppliedFactIds] = useState<string[]>([]);
   const [scalingExplanation, setScalingExplanation] = useState<ScalingExplanation | null>(null);
+  const [isExplainingScaling, setIsExplainingScaling] = useState(false);
+  const [maxZonesBenchmark, setMaxZonesBenchmark] = useState(24);
+  const [maxArityBenchmark, setMaxArityBenchmark] = useState(2);
   const [ruleErrors, setRuleErrors] = useState<string[]>([]);
-  const [showRoundSummary, setShowRoundSummary] = useState(false);
+  const [cumulativeStats, setCumulativeStats] = useState({ applied: 0, generated: 0 });
 
   // Rule Editor State
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [newRule, setNewRule] = useState<LogicRule>({ id: 'R_NEW', head: '', body: [], probability: 0.9, stratum: 1 });
+  const [isConvertingIntent, setIsConvertingIntent] = useState(false);
+
+  // Initialize maxArityBenchmark based on current rules
+  useEffect(() => {
+    if (rules.length === 0) return;
+    let maxFound = 1;
+
+    rules.forEach(r => {
+      const allAtoms = [r.head, ...r.body];
+      allAtoms.forEach(atom => {
+        const match = atom.match(/\((.*)\)/);
+        if (match && match[1]) {
+          const args = match[1].split(',').map(s => s.trim());
+          if (args.length > maxFound) {
+            maxFound = args.length;
+          }
+        }
+      });
+    });
+    setMaxArityBenchmark(Math.min(4, Math.max(1, maxFound)));
+  }, []);
 
   // --- Handlers ---
 
@@ -721,7 +977,8 @@ export default function App() {
     const result = await runInference();
     if (result) {
       const { facts } = result;
-      setInferredFacts(facts);
+      // Note: inferredFacts is already managed by the hook, but we might want local state if needed
+      // Actually the hook exports inferredFacts, so we just use that in the UI.
       setGamePhase('reviewing_recommendations');
       setIsStale(false);
       addLog(`Inference complete. ${facts.length} facts generated.`);
@@ -737,33 +994,35 @@ export default function App() {
 
   const handleApplyRecommendation = (action: string, zoneId: string, factId: string) => {
     if (appliedFactIds.includes(factId)) return;
-    applyRecommendation(action, zoneId);
+    applyRecommendation(action, zoneId, factId);
     setAppliedFactIds(prev => [...prev, factId]);
     addLog(`Applied recommendation: ${action} in ${zoneId}.`);
   };
 
   const handleReset = () => {
     setAppliedFactIds([]);
-    setInferredFacts([]);
     setSelectedFact(null);
     setHighlightedZone(null);
     setGamePhase('awaiting_inference');
+    setCumulativeStats({ applied: 0, generated: 0 });
     resetSession();
     addLog("Session reset. Map regenerated.");
   };
 
   const handleAdvanceTurn = () => {
     if (appliedFactIds.length === 0) {
-      addLog("At least one recommendation must be applied before advancing.");
-      return;
+      addLog("Advancing turn without applying recommended actions.");
     }
-    
-    const report = advanceTurn();
-    setShowRoundSummary(true);
-    
+
+    setCumulativeStats(prev => ({
+      applied: prev.applied + appliedFactIds.length,
+      generated: prev.generated + inferredFacts.length
+    }));
+
+    advanceTurn();
+
     // Reset for next turn
     setAppliedFactIds([]);
-    setInferredFacts([]);
     setSelectedFact(null);
     setHighlightedZone(null);
     setGamePhase('awaiting_inference');
@@ -786,11 +1045,11 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        setZones(data.zones);
-        setRules(data.rules);
-        setSeed(data.seed || seed);
-        addLog("Scenario loaded successfully.");
+        const scenario = JSON.parse(event.target?.result as string);
+        setSeed(scenario.seed);
+        setNumZones(scenario.zones.length);
+        setZones(scenario.zones);
+        addLog(`Loaded scenario "${file.name}" successfully.`);
       } catch (err) {
         addLog("Error loading scenario JSON.");
       }
@@ -802,18 +1061,161 @@ export default function App() {
     const updatedRules = [...rules, newRule];
     setRules(updatedRules);
     setIsAddingRule(false);
-    addLog(`Added rule ${newRule.id}. Running validation...`);
-    // Validation is handled by useInference on next run
+    addLog(`Added custom rule: ${newRule.head} <- ${newRule.body.join(', ')}`);
+    setNewRule({ id: `R_CUSTOM_${Date.now().toString().slice(-4)}`, head: '', body: [], probability: 0.9, stratum: 1 });
+  };
+
+  const handleProposeIntent = async () => {
+    if (!humanIntent.trim()) return;
+    setIsConvertingIntent(true);
+    addLog("Analyzing strategic intent...");
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      addLog("Error: GEMINI_API_KEY not found.");
+      setIsConvertingIntent(false);
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `
+        You are a symbolic logic expert. Convert this military strategy intention into one or more Datalog-style rules.
+        Intent: "${humanIntent}"
+        
+        Variables: X, Y, Z
+        Predicates: 
+        - Vulnerable(X)
+        - Strong(X)
+        - Defend(X)
+        - Attack(X)
+        - Allied(X)
+        - Hostile(X)
+        - Proximal(X, Y)
+        - Reinforced(X)
+        
+        Example: "If a zone is vulnerable and has a proximal hostile that is strong, we should defend it"
+        Output: [
+          { 
+            "head": "Defend(X)", 
+            "body": ["Vulnerable(X)", "Proximal(X, Y)", "Hostile(Y)", "Strong(Y)"], 
+            "description": "Prioritize defense for vulnerable zones near strong hostiles.",
+            "confidence": 0.85 
+          }
+        ]
+        
+        Rules:
+        1. Range restriction: All head variables MUST be in the body.
+        2. Arity: Max 2.
+        3. Output ONLY a valid JSON ARRAY of objects. Each object must have 'head', 'body' (array of strings), 'description', and 'confidence' (number between 0 and 1).
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+
+      const text = response.text || "[]";
+      // Extract the JSON array
+      const startIdx = text.indexOf('[');
+      const endIdx = text.lastIndexOf(']');
+
+      if (startIdx === -1 || endIdx === -1) {
+        throw new Error("LLM did not return a valid JSON array.");
+      }
+
+      const cleanJson = text.substring(startIdx, endIdx + 1);
+      const parsedData = JSON.parse(cleanJson);
+
+      const parsedArray = Array.isArray(parsedData) ? parsedData : [parsedData];
+
+      const newRules: LogicRule[] = parsedArray.map((ruleData: any, index: number) => {
+        const rule: LogicRule = {
+          id: `R_INTENT_${Date.now().toString().slice(-4)}_${index}`,
+          head: ruleData.head,
+          body: ruleData.body,
+          probability: ruleData.confidence ?? 0.8,
+          stratum: 2,
+          description: ruleData.description
+        };
+
+        // Check arity constraint
+        const maxArityInRule = Math.max(
+          ...[rule.head, ...rule.body].map(atom => atom.match(/\((.*)\)/)?.[1]?.split(',')?.length || 0)
+        );
+
+        if (maxArityInRule > maxArityBenchmark) {
+          addLog(`Warning: Generated rule arity (${maxArityInRule}) exceeds Max Arity (${maxArityBenchmark}). The engine will still process it.`);
+        }
+
+        return rule;
+      });
+
+      setHypotheses(prev => [...newRules, ...prev]);
+      setHumanIntent('');
+      addLog(`LLM successfully translated intent to ${newRules.length} candidate logic rule(s).`);
+    } catch (err) {
+      addLog("Intent translation failed: " + (err as Error).message);
+    } finally {
+      setIsConvertingIntent(false);
+    }
   };
 
   const handleRunBenchmark = async () => {
-    await runBenchmark();
-    // Generate explanation
-    setScalingExplanation({
-      runtimeTrend: "Execution time scales quadratically with zone count, as expected for binary predicates in TS-PHOL.",
-      complexityTrend: "Fact generation and rule firings follow a predictable polynomial path, ensuring tractability even at scale.",
-      impactNote: "This deterministic scaling allows the engine to provide real-time strategic advice without the risk of exponential blowup."
-    });
+    addLog(`Running scaling benchmark up to ${maxZonesBenchmark} zones...`);
+    await runBenchmark(maxZonesBenchmark);
+    addLog("Benchmark complete.");
+  };
+
+  const handleExplainScaling = async () => {
+    if (scalingMetrics.length === 0) return;
+    setIsExplainingScaling(true);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      addLog("Error: GEMINI_API_KEY not found.");
+      setIsExplainingScaling(false);
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `
+        You are a performance architect analyzing a probabilistic logic engine.
+        Benchmark Data(Runtime vs Zone Count):
+        ${JSON.stringify(scalingMetrics)}
+        
+        System Parameters:
+        - Max Arity(k): ${maxArityBenchmark}
+      - Expected Complexity: O(N ^ ${maxArityBenchmark})
+        
+        Analyze the scaling trend. 
+        1. Does it strictly follow the polynomial bound ?
+        2. What is the projected runtime for 1000 zones ?
+          3. Explain the meaning of "Proof Depth" in terms of strategic sophistication.
+        
+        Write a 3 - paragraph executive summary for the commander.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+
+      const text = response.text || "Failed to generate report.";
+      const paragraphs = text.split('\n\n').filter(p => p.trim());
+
+      setScalingExplanation({
+        runtimeTrend: paragraphs[0] || "Trend analysis unavailable.",
+        complexityTrend: paragraphs[1] || "Complexity analysis unavailable.",
+        impactNote: paragraphs[2] || "Impact assessment unavailable."
+      });
+      addLog("AI Scaling Audit complete.");
+    } catch (err) {
+      addLog("Scaling analysis failed: " + (err as Error).message);
+    } finally {
+      setIsExplainingScaling(false);
+    }
   };
 
   // --- Render Helpers ---
@@ -823,25 +1225,92 @@ export default function App() {
       case 'scenario':
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <TabHeader 
-              title="Operational Theater" 
-              description="Analyze tactical recommendations and apply strategic actions. The TS-PHOL engine provides verifiable guidance for battlefield management." 
+            <TabHeader
+              title="Operational Theater"
+              description="Analyze tactical recommendations and apply strategic actions. The TS-PHOL engine provides verifiable guidance for battlefield management."
               icon={<Target size={20} />}
             />
-            
-            <div className="flex items-center justify-between mb-2 px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-2xl">
+
+            <div className="flex justify-end mb-2 -mt-10 relative z-10 px-4">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <span className="text-[10px] font-bold text-slate-400 uppercase group-hover:text-white transition-colors">Intelligence Updates</span>
+                <div
+                  className={cn("w-8 h-4 rounded-full transition-colors relative", isIntelligenceEnabled ? "bg-indigo-500" : "bg-slate-800")}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setIsIntelligenceEnabled(!isIntelligenceEnabled);
+                  }}
+                >
+                  <div className={cn("absolute top-0.5 bottom-0.5 w-3 bg-white rounded-full transition-all shadow-sm", isIntelligenceEnabled ? "left-4.5" : "left-0.5")} />
+                </div>
+              </label>
+            </div>
+
+            {gamePhase === 'awaiting_inference' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-8 p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-600 flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20">
+                    <Play className="text-white ml-1" size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white tracking-tight">Awaiting Intelligence Run</h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Execute the TS-PHOL engine to assess tactical situations across {numZones} zones.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-8">
+                  <div className="grid grid-cols-4 md:grid-cols-7 gap-6 pr-4">
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Allied</span>
+                      <span className="text-xl font-bold tracking-tighter text-emerald-400">{zones.reduce((sum, z) => sum + z.ours, 0)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Enemy</span>
+                      <span className="text-xl font-bold tracking-tighter text-rose-400">{zones.reduce((sum, z) => sum + z.enemy, 0)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Supply</span>
+                      <span className="text-xl font-bold tracking-tighter text-amber-400">{zones.reduce((sum, z) => sum + z.supply, 0)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Value</span>
+                      <span className="text-xl font-bold tracking-tighter text-indigo-400">{zones.reduce((sum, z) => sum + z.value, 0)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Avg P_Attack</span>
+                      <span className="text-xl font-bold tracking-tighter text-white">{(zones.reduce((sum, z) => sum + z.p_attack, 0) / (zones.length || 1)).toFixed(2)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Avg P_Succ</span>
+                      <span className="text-xl font-bold tracking-tighter text-white">{(zones.reduce((sum, z) => sum + z.p_success, 0) / (zones.length || 1)).toFixed(2)}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Active Fog</span>
+                      <span className="text-xl font-bold tracking-tighter text-slate-300">{zones.filter(z => z.fog).length}</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-4 px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-2xl gap-4">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <div className={cn(
                     "w-2.5 h-2.5 rounded-full shadow-[0_0_10px_rgba(0,0,0,0.5)]",
                     gamePhase === 'awaiting_inference' ? "bg-amber-500 shadow-amber-500/50" :
-                    gamePhase === 'ai_evaluating' ? "bg-indigo-500 shadow-indigo-500/50 animate-pulse" :
-                    gamePhase === 'reviewing_recommendations' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-500"
+                      gamePhase === 'ai_evaluating' ? "bg-indigo-500 shadow-indigo-500/50 animate-pulse" :
+                        gamePhase === 'reviewing_recommendations' ? "bg-emerald-500 shadow-emerald-500/50" : "bg-slate-500"
                   )} />
                   <span className="text-[11px] font-bold text-white uppercase tracking-[0.15em]">
                     {gamePhase === 'awaiting_inference' ? 'Awaiting Intelligence Run' :
-                     gamePhase === 'ai_evaluating' ? 'AI Evaluating Strategy' :
-                     gamePhase === 'reviewing_recommendations' ? 'Reviewing Recommendations' : 'Turn Result Analyzed'}
+                      gamePhase === 'ai_evaluating' ? 'AI Evaluating Strategy' :
+                        gamePhase === 'reviewing_recommendations' ? 'Reviewing Recommendations' : 'Turn Result Analyzed'}
                   </span>
                 </div>
                 <div className="h-4 w-[1px] bg-slate-800" />
@@ -850,53 +1319,81 @@ export default function App() {
                     <span className="text-[8px] font-mono text-slate-500 uppercase">Turn</span>
                     <span className="text-xs font-bold text-white">{turn}</span>
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-[8px] font-mono text-slate-500 uppercase">Applied Actions</span>
-                    <span className="text-xs font-bold text-indigo-400">{appliedFactIds.length}</span>
-                  </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <button 
+                {gamePhase === 'awaiting_inference' && (
+                  <button
+                    onClick={handleInference}
+                    disabled={isInferring}
+                    className={cn(
+                      "flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg text-white shadow-indigo-500/20 active:scale-95",
+                      isInferring ? "bg-indigo-600/50 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"
+                    )}
+                  >
+                    {isInferring ? <RefreshCw className="animate-spin" size={14} /> : <Play size={14} />}
+                    <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
+                  </button>
+                )}
+
+                {gamePhase === 'reviewing_recommendations' && (
+                  <button
+                    onClick={handleAdvanceTurn}
+                    className="flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20 active:scale-95"
+                  >
+                    <ChevronRight size={14} /> Next Turn
+                  </button>
+                )}
+
+                <button
                   onClick={handleReset}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold uppercase transition-all"
                 >
                   <RefreshCw size={14} /> Reset Session
                 </button>
-                {gamePhase === 'reviewing_recommendations' && (
-                  <button 
-                    onClick={handleAdvanceTurn}
-                    disabled={appliedFactIds.length === 0}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg",
-                      appliedFactIds.length > 0 
-                        ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20" 
-                        : "bg-slate-800 text-slate-500 cursor-not-allowed"
-                    )}
-                  >
-                    <ChevronRight size={14} /> Next Turn
-                  </button>
-                )}
               </div>
             </div>
 
-            <TurnChangeReport report={lastTurnReport} />
+            {isIntelligenceEnabled && (
+              <div className="mb-6">
+                <TurnChangeReport report={lastTurnReport} />
+              </div>
+            )}
 
-            <div className="flex items-center gap-4 mb-4">
+            <div className="w-full">
+              <DecisionCard
+                facts={inferredFacts}
+                zones={zones}
+                onShowProof={handleShowProof}
+                selectedFactId={selectedFact?.id}
+                onApply={handleApplyRecommendation}
+                appliedFactIds={appliedFactIds}
+                disabled={gamePhase !== 'reviewing_recommendations'}
+                cumulativeStats={cumulativeStats}
+              />
+            </div>
+
+            <MapGrid
+              zones={zones}
+              highlightedZone={highlightedZone}
+              onEditZone={(updated) => setZones(zones.map(z => z.id === updated.id ? updated : z))}
+            />
+
+            <div className="flex items-center gap-4">
               <div className="flex-1 flex items-center gap-4 bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2">
                 <div className="flex items-center gap-3 border-r border-slate-800 pr-4">
                   <span className="text-[10px] font-mono text-slate-500 uppercase">Zones:</span>
-                  <input 
+                  <input
                     type="range" min="2" max="12" step="1"
-                    value={numZones} 
+                    value={numZones}
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="w-24 accent-indigo-500"
                     disabled={gamePhase !== 'awaiting_inference'}
                   />
-                  <input 
+                  <input
                     type="number" min="2" max="12"
-                    value={numZones} 
+                    value={numZones}
                     onChange={e => setNumZones(parseInt(e.target.value))}
                     className="bg-slate-800 border border-slate-700 text-xs font-mono text-white rounded w-12 text-center"
                     disabled={gamePhase !== 'awaiting_inference'}
@@ -904,15 +1401,15 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-slate-500 uppercase">Seed:</span>
-                  <input 
-                    value={seed} 
+                  <input
+                    value={seed}
                     onChange={e => setSeed(e.target.value)}
                     className="bg-transparent border-none text-xs font-mono text-white focus:ring-0 w-24"
                     disabled={gamePhase !== 'awaiting_inference'}
                   />
-                  <button 
-                    onClick={() => initZones(numZones)} 
-                    className="text-slate-500 hover:text-white transition-colors disabled:opacity-30" 
+                  <button
+                    onClick={() => initZones(numZones)}
+                    className="text-slate-500 hover:text-white transition-colors disabled:opacity-30"
                     title="Regenerate Map"
                     disabled={gamePhase !== 'awaiting_inference'}
                   >
@@ -930,51 +1427,20 @@ export default function App() {
                 </label>
               </div>
             </div>
-
-            <MapGrid 
-              zones={zones} 
-              highlightedZone={highlightedZone} 
-              onEditZone={(updated) => setZones(zones.map(z => z.id === updated.id ? updated : z))} 
-            />
-
-            <div className="w-full">
-              <DecisionCard 
-                facts={inferredFacts} 
-                zones={zones}
-                onShowProof={handleShowProof}
-                selectedFactId={selectedFact?.id}
-                onApply={handleApplyRecommendation}
-                appliedFactIds={appliedFactIds}
-                disabled={gamePhase !== 'reviewing_recommendations'}
-              />
-            </div>
-          </div>
-        );
-      case 'ml':
-        return (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <TabHeader 
-              title="ML Perception Signals" 
-              description="These signals are generated by deep neural networks analyzing raw battlefield data. They serve as the probabilistic inputs for the TS-PHOL engine." 
-              icon={<BrainCircuit size={20} />}
-            />
-            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-bold text-white">Signal Calibration</h3>
-                <div className="text-[10px] font-mono text-slate-500 uppercase">Editable Parameters</div>
-              </div>
-              <MLSignalsEditor zones={zones} onUpdate={updateZoneML} />
-            </div>
           </div>
         );
       case 'hypothesis':
         return (
-          <HypothesisGeneratorView 
+          <HypothesisGeneratorView
             hypotheses={hypotheses}
             onPropose={proposeHypothesis}
             onAccept={acceptHypothesis}
             onReject={rejectHypothesis}
             isGenerating={isGeneratingHypothesis}
+            humanIntent={humanIntent}
+            onIntentChange={setHumanIntent}
+            onProposeIntent={handleProposeIntent}
+            isConvertingIntent={isConvertingIntent}
           />
         );
       case 'validator':
@@ -985,16 +1451,23 @@ export default function App() {
         return (
           <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="col-span-12 lg:col-span-8 space-y-6">
-              <TabHeader 
-                title="Knowledge Base" 
-                description="Higher-order rules define how ML signals compose into tactical decisions. The engine enforces PTIME tractability." 
+              <TabHeader
+                title="Knowledge Base"
+                description="Higher-order rules define how ML signals compose into tactical decisions. The engine enforces PTIME tractability."
                 icon={<Layers size={20} />}
               />
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-sm font-bold flex items-center gap-2 text-white">
-                    Active Rule Set
-                  </h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-sm font-bold flex items-center gap-2 text-white">
+                      Active Rule Set
+                    </h3>
+                    <ExplainButton
+                      context="ruleset"
+                      data={{ rules }}
+                      className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 scale-90 origin-left"
+                    />
+                  </div>
                   <div className={cn(
                     "px-3 py-1 rounded-full text-[10px] font-bold font-mono flex items-center gap-2",
                     validation.valid ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
@@ -1048,40 +1521,40 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <label className="text-[10px] font-mono text-slate-500 uppercase">Head</label>
-                          <input 
-                            value={newRule.head} 
-                            onChange={e => setNewRule({...newRule, head: e.target.value})}
+                          <input
+                            value={newRule.head}
+                            onChange={e => setNewRule({ ...newRule, head: e.target.value })}
                             placeholder="e.g. Win(z)"
                             className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-white"
                           />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-mono text-slate-500 uppercase">Stratum</label>
-                          <input 
+                          <input
                             type="number"
-                            value={newRule.stratum} 
-                            onChange={e => setNewRule({...newRule, stratum: parseInt(e.target.value)})}
+                            value={newRule.stratum}
+                            onChange={e => setNewRule({ ...newRule, stratum: parseInt(e.target.value) })}
                             className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-white"
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-mono text-slate-500 uppercase">Body (comma separated)</label>
-                        <input 
-                          value={newRule.body.join(', ')} 
-                          onChange={e => setNewRule({...newRule, body: e.target.value.split(',').map(s => s.trim())})}
+                        <input
+                          value={newRule.body.join(', ')}
+                          onChange={e => setNewRule({ ...newRule, body: e.target.value.split(',').map(s => s.trim()) })}
                           placeholder="e.g. Win(z), Lose(z)"
                           className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-white"
                         />
                       </div>
                       <div className="flex gap-2 pt-2">
-                        <button 
+                        <button
                           onClick={addRule}
                           className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded transition-all"
                         >
                           VALIDATE & ADD
                         </button>
-                        <button 
+                        <button
                           onClick={() => setIsAddingRule(false)}
                           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold rounded transition-all"
                         >
@@ -1090,7 +1563,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => setIsAddingRule(true)}
                       className="w-full py-4 border-2 border-dashed border-slate-800 rounded-xl text-slate-600 hover:text-indigo-400 hover:border-indigo-400/50 transition-all flex items-center justify-center gap-2 text-xs font-mono"
                     >
@@ -1122,12 +1595,12 @@ export default function App() {
 
         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <TabHeader 
-              title="Logical Proof Artifacts" 
-              description="Inspect the symbolic derivation chains for the top recommendations. TS-PHOL guarantees that every action is logically grounded in tactical signals." 
+            <TabHeader
+              title="Logical Proof Artifacts"
+              description="Inspect the symbolic derivation chains for the top recommendations. TS-PHOL guarantees that every action is logically grounded in tactical signals."
               icon={<Network size={20} />}
             />
-            
+
             <div className="grid grid-cols-12 gap-6">
               <div className="col-span-12 lg:col-span-4 space-y-4">
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
@@ -1143,7 +1616,10 @@ export default function App() {
                         )}
                       >
                         <div className="flex flex-col gap-1">
-                          <span className="text-xs font-mono font-bold text-white group-hover:text-indigo-400 transition-colors">{f.predicate}({f.args.join(', ')})</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-white group-hover:text-indigo-400 transition-colors">{f.predicate}({f.args.join(', ')})</span>
+                            <span className="text-[8px] px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-500 font-mono">k={f.args.length}</span>
+                          </div>
                           <span className="text-[9px] font-mono text-slate-500">{(f.probability * 100).toFixed(0)}% Confidence</span>
                         </div>
                         <ChevronRight size={14} className={cn("transition-transform", selectedFact?.id === f.id ? "translate-x-1" : "opacity-0 group-hover:opacity-100")} />
@@ -1155,7 +1631,14 @@ export default function App() {
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">All Inferred Facts</h3>
-                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">{inferredFacts.length}</span>
+                    <div className="flex items-center gap-2">
+                      <ExplainButton
+                        context="facts"
+                        data={{ facts: inferredFacts }}
+                        className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 scale-75 origin-right"
+                      />
+                      <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-400">{inferredFacts.length}</span>
+                    </div>
                   </div>
                   <div className="space-y-1 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                     {inferredFacts.map(f => (
@@ -1176,10 +1659,10 @@ export default function App() {
 
               <div className="col-span-12 lg:col-span-8">
                 <div className="bg-slate-900/50 border border-slate-800 rounded-2xl h-full min-h-[600px] overflow-hidden">
-                  <InteractiveProof 
-                    fact={selectedFact || topRecs[0] || null} 
-                    zones={zones} 
-                    onHighlight={setHighlightedZone} 
+                  <InteractiveProof
+                    fact={selectedFact || topRecs[0] || null}
+                    zones={zones}
+                    onHighlight={setHighlightedZone}
                     onSelectFact={setSelectedFact}
                     selectedFactId={selectedFact?.id || topRecs[0]?.id}
                   />
@@ -1190,10 +1673,17 @@ export default function App() {
         );
       case 'scaling':
         return (
-          <ScalingView 
-            metrics={scalingMetrics} 
-            onRunBenchmark={handleRunBenchmark} 
+          <ScalingView
+            metrics={scalingMetrics}
+            onRunBenchmark={handleRunBenchmark}
             explanation={scalingExplanation}
+            maxZones={maxZonesBenchmark}
+            setMaxZones={setMaxZonesBenchmark}
+            maxArity={maxArityBenchmark}
+            setMaxArity={setMaxArityBenchmark}
+            onExplain={handleExplainScaling}
+            isExplaining={isExplainingScaling}
+            onResetBenchmark={() => setScalingMetrics([])}
           />
         );
       default:
@@ -1202,51 +1692,56 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-slate-200 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       <Onboarding />
-      
-      {showRoundSummary && (
-        <RoundSummaryModal 
-          report={lastTurnReport} 
-          onClose={() => setShowRoundSummary(false)} 
-        />
-      )}
 
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Shield className="text-white" size={24} />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white">TS-PHOL Strategy Workbench</h1>
-              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-[0.2em]">High-Assurance Adversarial Reasoning</p>
+      <header className="fixed top-0 inset-x-0 h-16 bg-slate-900 border-b border-slate-800 z-40 px-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <Shield className="text-white" size={18} />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-white tracking-tight">TS-PHOL Strategy Workbench</h1>
+            <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5">
+              <span className="flex items-center gap-1"><Cpu size={10} /> Probabilistic Logic</span>
+              <span>•</span>
+              <span className="flex items-center gap-1"><Zap size={10} /> {numZones} Zones</span>
             </div>
           </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="flex gap-2 items-center">
-              {isStale && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-lg animate-pulse">
-                  <AlertCircle size={14} className="text-amber-400" />
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-tight">Inference Stale</span>
-                </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 px-3 py-1 bg-slate-950/50 rounded-full border border-slate-800">
+            <Activity size={12} className={currentHealth > initialHealth ? "text-emerald-400" : "text-amber-400"} />
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[9px] font-mono text-slate-500 uppercase">Health Index</span>
+              <span className={cn(
+                "text-xs font-bold font-mono",
+                currentHealth > initialHealth ? "text-emerald-400" : currentHealth < initialHealth ? "text-rose-400" : "text-white"
+              )}>
+                {currentHealth.toFixed(1)}
+              </span>
+              <span className="text-[8px] font-mono text-slate-600">/ {initialHealth.toFixed(1)}</span>
+              {Math.abs(currentHealth - initialHealth) > 0 && (
+                <span className={cn(
+                  "text-[9px] font-mono font-bold ml-1",
+                  currentHealth > initialHealth ? "text-emerald-400" : "text-rose-400"
+                )}>
+                  {currentHealth > initialHealth ? '↑' : '↓'} {(((currentHealth - initialHealth) / initialHealth) * 100).toFixed(1)}%
+                </span>
               )}
-              <button 
-                onClick={handleInference}
-                disabled={isInferring || gamePhase !== 'awaiting_inference'}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all",
-                  isInferring || gamePhase !== 'awaiting_inference'
-                    ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
-                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 active:scale-95"
-                )}
-              >
-                {isInferring ? <RefreshCw className="animate-spin" size={18} /> : <Play size={18} />}
-                <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
-              </button>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(0,0,0,0.5)] shadow-emerald-500/50" />
+            <span className="text-[11px] font-bold text-white uppercase tracking-[0.15em]">
+              Operational
+            </span>
+          </div>
+          <div className="h-4 w-[1px] bg-slate-800" />
+          <div className="flex items-center gap-2">
+            <span className="text-[8px] font-mono text-slate-500 uppercase">Turn</span>
+            <span className="text-xs font-bold text-white">{turn}</span>
           </div>
         </div>
       </header>
@@ -1278,7 +1773,7 @@ export default function App() {
               {i < arr.length - 1 && (
                 <div className="flex-1 h-[1px] bg-slate-800 mx-4 relative">
                   {currentStep === step.id && (
-                    <motion.div 
+                    <motion.div
                       className="absolute inset-0 bg-indigo-500"
                       initial={{ width: 0 }}
                       animate={{ width: '100%' }}
@@ -1299,7 +1794,6 @@ export default function App() {
           <div className="flex items-center gap-1 bg-slate-900/50 p-1 border border-slate-800 rounded-xl w-fit overflow-x-auto max-w-full">
             {[
               { id: 'scenario', label: 'Scenario', icon: Target },
-              { id: 'ml', label: 'ML Signals', icon: Cpu },
               { id: 'hypothesis', label: 'Hypothesis', icon: BrainCircuit },
               { id: 'validator', label: 'Validator', icon: Shield },
               { id: 'inference', label: 'Inference', icon: Terminal },
@@ -1322,21 +1816,21 @@ export default function App() {
 
           <div className="flex items-center gap-2 px-4 py-2 bg-slate-900/30 border border-slate-800/50 rounded-xl">
             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mr-2">Quick Actions:</span>
-            <button 
+            <button
               onClick={() => setActiveTab('inference')}
               className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
             >
               <Layers size={12} /> Rules
             </button>
             <div className="w-[1px] h-3 bg-slate-800" />
-            <button 
+            <button
               onClick={() => setActiveTab('proof')}
               className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
             >
               <Terminal size={12} /> Proofs
             </button>
             <div className="w-[1px] h-3 bg-slate-800" />
-            <button 
+            <button
               onClick={() => setActiveTab('scaling')}
               className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors"
             >

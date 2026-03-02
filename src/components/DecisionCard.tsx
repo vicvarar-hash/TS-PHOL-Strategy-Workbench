@@ -5,9 +5,10 @@
 
 import React from 'react';
 import { motion } from 'motion/react';
-import { Bot, Target, Shield, Zap, Info, ChevronRight, AlertTriangle, Calculator, Play, CheckCircle2 } from 'lucide-react';
+import { Bot, Target, Shield, Zap, Info, ChevronRight, AlertTriangle, Calculator, Play, CheckCircle2, FileText, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { GroundedFact, ZoneState } from '../types';
+import { GoogleGenAI } from '@google/genai';
 
 interface RecommendationCardProps {
   fact: GroundedFact;
@@ -20,9 +21,10 @@ interface RecommendationCardProps {
   disabled: boolean;
 }
 
-const RecommendationCard: React.FC<RecommendationCardProps> = ({ 
-  fact, zone, isPrimary, onShowProof, isSelected, onApply, isApplied, disabled 
+const RecommendationCard: React.FC<RecommendationCardProps> = ({
+  fact, zone, isPrimary, onShowProof, isSelected, onApply, isApplied, disabled
 }) => {
+  const [showMath, setShowMath] = React.useState(false);
   const action = fact.args[0];
   const isAttack = action === 'Attack';
   const confidence = fact.probability;
@@ -38,29 +40,29 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
   });
 
   return (
-    <motion.div 
+    <motion.div
       whileHover={!disabled && !isApplied ? { y: -2 } : {}}
       animate={isSelected ? { scale: [1, 1.02, 1], borderColor: ['rgba(99, 102, 241, 0.5)', 'rgba(99, 102, 241, 1)', 'rgba(99, 102, 241, 0.5)'] } : {}}
       transition={isSelected ? { repeat: Infinity, duration: 2 } : {}}
       className={cn(
         "rounded-xl border transition-all overflow-hidden flex flex-col",
         isApplied ? "bg-emerald-500/10 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.1)]" :
-        isSelected ? "bg-indigo-600/10 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)] ring-2 ring-indigo-500/50" :
-        isPrimary 
-          ? "bg-slate-800/80 border-indigo-500/50 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/20" 
-          : "bg-slate-900/40 border-slate-800 hover:border-slate-700"
+          isSelected ? "bg-indigo-600/10 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)] ring-2 ring-indigo-500/50" :
+            isPrimary
+              ? "bg-slate-800/80 border-indigo-500/50 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/20"
+              : "bg-slate-900/40 border-slate-800 hover:border-slate-700"
       )}
     >
       <div className={cn(
         "px-4 py-2 border-b flex items-center justify-between",
         isApplied ? "bg-emerald-500/10 border-emerald-500/20" :
-        isAttack ? "bg-rose-500/5 border-rose-500/10" : "bg-indigo-500/5 border-indigo-500/10"
+          isAttack ? "bg-rose-500/5 border-rose-500/10" : "bg-indigo-500/5 border-indigo-500/10"
       )}>
         <div className="flex items-center gap-2">
           <div className={cn(
             "w-6 h-6 rounded-md flex items-center justify-center",
             isApplied ? "bg-emerald-600 text-white" :
-            isAttack ? "bg-rose-600 text-white" : "bg-indigo-600 text-white"
+              isAttack ? "bg-rose-600 text-white" : "bg-indigo-600 text-white"
           )}>
             {isApplied ? <CheckCircle2 size={14} /> : isAttack ? <Zap size={14} /> : <Shield size={14} />}
           </div>
@@ -96,13 +98,13 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
           </ul>
         </div>
 
-        <div className="flex flex-col gap-2">
-          <button 
+        <div className="flex flex-col gap-1.5">
+          <button
             onClick={() => onApply(action, zone?.id || '', fact.id)}
             disabled={disabled || isApplied}
             className={cn(
               "w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2",
-              isApplied 
+              isApplied
                 ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 cursor-default"
                 : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:bg-slate-800"
             )}
@@ -110,13 +112,45 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
             {isApplied ? <CheckCircle2 size={12} /> : <Play size={12} />}
             {isApplied ? 'Applied' : 'Apply Action'}
           </button>
-          <button 
-            onClick={() => onShowProof(fact)}
-            className="w-full py-1.5 bg-slate-800/50 hover:bg-slate-700 text-slate-400 text-[9px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 uppercase tracking-widest"
-          >
-            View Proof <ChevronRight size={12} />
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => onShowProof(fact)}
+              className="flex-1 py-1.5 bg-slate-800/50 hover:bg-slate-700 text-slate-400 text-[9px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 uppercase tracking-widest"
+            >
+              View Proof <ChevronRight size={12} />
+            </button>
+            <button
+              onClick={() => setShowMath(!showMath)}
+              className={cn(
+                "flex-1 py-1.5 bg-slate-800/50 hover:bg-slate-700 text-[9px] font-bold rounded-lg transition-all flex items-center justify-center gap-1 uppercase tracking-widest",
+                showMath ? "text-indigo-400 border border-indigo-500/30" : "text-slate-400"
+              )}
+            >
+              <Calculator size={12} /> Math
+            </button>
+          </div>
         </div>
+
+        {showMath && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-[9px] font-mono text-slate-400 space-y-2 mt-2"
+          >
+            <div className="text-indigo-400 font-bold mb-1 border-b border-indigo-500/20 pb-1 flex items-center gap-1">
+              <Calculator size={10} /> Confidence Computation
+            </div>
+            <div><span className="text-slate-500">P(Rule):</span> {fact.ruleId}</div>
+            <div className="space-y-0.5 pl-2 mt-1 border-l border-slate-800">
+              {fact.childFacts.map((f, i) => (
+                <div key={i}><span className="text-slate-500">P({f.predicate}):</span> {(f.probability * 100).toFixed(0)}%</div>
+              ))}
+            </div>
+            <div className="pt-1 mt-1 border-t border-slate-800 text-emerald-400 font-bold">
+              Final: P({fact.predicate}) = {(fact.probability * 100).toFixed(0)}%
+            </div>
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );
@@ -130,11 +164,55 @@ interface DecisionCardProps {
   onApply: (action: string, zoneId: string, factId: string) => void;
   appliedFactIds: string[];
   disabled: boolean;
+  cumulativeStats: { applied: number, generated: number };
 }
 
-export const DecisionCard: React.FC<DecisionCardProps> = ({ 
-  facts, zones, onShowProof, selectedFactId, onApply, appliedFactIds, disabled 
+export const DecisionCard: React.FC<DecisionCardProps> = ({
+  facts, zones, onShowProof, selectedFactId, onApply, appliedFactIds, disabled, cumulativeStats
 }) => {
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const [commanderReport, setCommanderReport] = React.useState<string | null>(null);
+
+  const generateReport = async () => {
+    setIsGenerating(true);
+    setReportOpen(true);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      setCommanderReport("Error: GEMINI_API_KEY not found in environment. Cannot generate report.");
+      setIsGenerating(false);
+      return;
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `
+        You are a seasoned operational commander reviewing AI tactical output.
+        Current Theater State:
+        ${JSON.stringify(zones.map(z => ({ id: z.id, name: z.name, ours: z.ours, enemy: z.enemy })), null, 2)}
+        
+        All Logically Inferred Facts (Full Battlefield Assessment):
+        ${JSON.stringify(facts.map(f => ({ pred: f.predicate, args: f.args, conf: f.probability })), null, 2)}
+        
+        Write a concise, 3-paragraph "Commander's Assessment". 
+        Paragraph 1: Synthesize the overall battlefield balance and health based on all inferred facts.
+        Paragraph 2: Explain in plain English *why* the top "Execute" recommendations were chosen based on the logic.
+        Paragraph 3: Note any glaring risks or non-selected vulnerabilities.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt
+      });
+      setCommanderReport(response.text || "Report generation failed.");
+    } catch (err) {
+      setCommanderReport("API Error: " + (err as Error).message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Filter and sort recommendations
   const recommendations = facts
     .filter(f => f.predicate === 'Execute' && f.probability > 0.01)
@@ -170,29 +248,45 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
           </div>
         </div>
 
-        <div className="group relative">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-800/50 border border-slate-700 rounded-full cursor-help">
-            <Calculator size={12} className="text-slate-500" />
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Confidence Math</span>
-          </div>
-          <div className="absolute right-0 top-full mt-2 w-64 p-4 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-            <h4 className="text-[10px] font-bold text-white uppercase mb-2">How we calculate confidence</h4>
-            <p className="text-[10px] text-slate-400 leading-relaxed">
-              Confidence is derived using the TS-PHOL probabilistic logic engine:
-            </p>
-            <div className="mt-2 p-2 bg-slate-950 rounded font-mono text-[9px] text-indigo-400">
-              P(Head) = P(Rule) * Π P(BodyFacts)
-            </div>
-            <p className="mt-2 text-[9px] text-slate-500 italic">
-              Probabilities are multiplied along the derivation chain, ensuring that uncertainty in signals propagates correctly to the final decision.
-            </p>
-          </div>
-        </div>
+
       </div>
+
+      <div className="flex gap-4">
+        <button
+          onClick={generateReport}
+          disabled={disabled || recommendations.length === 0}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isGenerating ? <RefreshCw size={14} className="animate-spin" /> : <FileText size={14} />}
+          Commander's Report
+        </button>
+      </div>
+
+      {reportOpen && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="p-4 bg-slate-950 border border-indigo-500/30 rounded-xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-32 h-32 bg-indigo-500/10 blur-3xl rounded-full pointer-events-none" />
+          <div className="relative z-10 space-y-3">
+            <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest border-b border-indigo-500/20 pb-2 mb-2 flex items-center gap-2">
+              <Bot size={14} /> Tactical Synthesis
+            </h4>
+            {isGenerating ? (
+              <p className="text-xs text-slate-500 animate-pulse">Consulting LLM models for battlefield analysis...</p>
+            ) : (
+              <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-serif">
+                {commanderReport}
+              </div>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {recommendations.map((fact, i) => (
-          <RecommendationCard 
+          <RecommendationCard
             key={fact.id}
             fact={fact}
             zone={zones.find(z => z.id === fact.args[1])}

@@ -43,7 +43,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
     <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
       {/* Background Grid Pattern */}
       <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#1e293b 1px, transparent 1px), linear-gradient(90deg, #1e293b 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-      
+
       <div className="flex items-center justify-between mb-6 relative z-10">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-400">
@@ -65,11 +65,11 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
           </div>
         </div>
       </div>
-      
+
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 relative z-10">
         {zones.map((z, idx) => (
-          <div 
-            key={z.id} 
+          <div
+            key={z.id}
             onClick={() => !editingId && startEdit(z)}
             className={cn(
               "aspect-square rounded-xl border transition-all relative overflow-hidden group cursor-pointer flex flex-col items-center justify-center p-2",
@@ -78,7 +78,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
             )}
           >
             {/* Coordinate Label */}
-            <div className="absolute top-1 left-1.5 text-[7px] font-mono text-slate-600 uppercase">
+            <div className="absolute top-1 left-1.5 text-[9px] font-mono text-slate-500 uppercase font-bold">
               {String.fromCharCode(65 + (idx % 8))}{Math.floor(idx / 8) + 1}
             </div>
 
@@ -94,46 +94,64 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-[7px] text-slate-500 uppercase font-bold">Allied</label>
-                    <input 
-                      type="number" 
-                      value={editValues?.ours} 
-                      onChange={e => setEditValues(prev => prev ? {...prev, ours: parseInt(e.target.value)} : null)}
+                    <input
+                      type="number"
+                      value={editValues?.ours}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, ours: parseInt(e.target.value) } : null)}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[7px] text-slate-500 uppercase font-bold">Enemy</label>
-                    <input 
-                      type="number" 
-                      value={editValues?.enemy} 
-                      onChange={e => setEditValues(prev => prev ? {...prev, enemy: parseInt(e.target.value)} : null)}
+                    <input
+                      type="number"
+                      value={editValues?.enemy}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, enemy: parseInt(e.target.value) } : null)}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[7px] text-slate-500 uppercase font-bold">Supply</label>
-                    <input 
-                      type="number" 
-                      value={editValues?.supply} 
-                      onChange={e => setEditValues(prev => prev ? {...prev, supply: parseInt(e.target.value)} : null)}
+                    <input
+                      type="number"
+                      value={editValues?.supply}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, supply: parseInt(e.target.value) } : null)}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[7px] text-slate-500 uppercase font-bold">Value</label>
-                    <input 
-                      type="number" 
-                      value={editValues?.value} 
-                      onChange={e => setEditValues(prev => prev ? {...prev, value: parseInt(e.target.value)} : null)}
+                    <input
+                      type="number"
+                      value={editValues?.value}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, value: parseInt(e.target.value) } : null)}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[7px] text-rose-500 uppercase font-bold">p_attack</label>
+                    <input
+                      type="number" step="0.01" min="0" max="1"
+                      value={editValues?.p_attack}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, p_attack: parseFloat(e.target.value) } : null)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-rose-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[7px] text-emerald-500 uppercase font-bold">p_success</label>
+                    <input
+                      type="number" step="0.01" min="0" max="1"
+                      value={editValues?.p_success}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, p_success: parseFloat(e.target.value) } : null)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg text-[10px] p-1.5 text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
                   <div className="col-span-2 flex items-center gap-2">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       id={`fog-${z.id}`}
-                      checked={editValues?.fog} 
-                      onChange={e => setEditValues(prev => prev ? {...prev, fog: e.target.checked} : null)}
+                      checked={editValues?.fog}
+                      onChange={e => setEditValues(prev => prev ? { ...prev, fog: e.target.checked } : null)}
                       className="accent-indigo-500"
                     />
                     <label htmlFor={`fog-${z.id}`} className="text-[7px] text-slate-500 uppercase font-bold cursor-pointer">Fog of War</label>
@@ -155,64 +173,64 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                     </div>
                   )}
                 </div>
-                
-                <div className="text-[7px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center">{z.id}</div>
-                
+
+                <div className="text-[9px] font-bold text-slate-300 uppercase tracking-tighter truncate w-full text-center">{z.id}</div>
+
                 <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 w-full mt-1">
                   <div className="flex items-center justify-between bg-indigo-500/10 rounded px-0.5 py-0.25">
-                    <span className="text-[5px] text-indigo-300 font-bold">A</span>
-                    <span className="text-[6px] font-mono text-white">{z.ours}</span>
+                    <span className="text-[7px] text-indigo-300 font-bold">A</span>
+                    <span className="text-[8px] font-mono text-white">{z.ours}</span>
                   </div>
                   <div className="flex items-center justify-between bg-rose-500/10 rounded px-0.5 py-0.25">
-                    <span className="text-[5px] text-rose-300 font-bold">E</span>
-                    <span className="text-[6px] font-mono text-white">{z.enemy}</span>
+                    <span className="text-[7px] text-rose-300 font-bold">E</span>
+                    <span className="text-[8px] font-mono text-white">{z.enemy}</span>
                   </div>
                   <div className="flex items-center justify-between bg-amber-500/10 rounded px-0.5 py-0.25">
-                    <span className="text-[5px] text-amber-300 font-bold">S</span>
-                    <span className="text-[6px] font-mono text-white">{z.supply}</span>
+                    <span className="text-[7px] text-amber-300 font-bold">S</span>
+                    <span className="text-[8px] font-mono text-white">{z.supply}</span>
                   </div>
                   <div className="flex items-center justify-between bg-emerald-500/10 rounded px-0.5 py-0.25">
-                    <span className="text-[5px] text-emerald-300 font-bold">V</span>
-                    <span className="text-[6px] font-mono text-white">{z.value}</span>
+                    <span className="text-[7px] text-emerald-300 font-bold">V</span>
+                    <span className="text-[8px] font-mono text-white">{z.value}</span>
                   </div>
                 </div>
 
                 <div className="w-full mt-1 space-y-0.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[5px] text-slate-500 uppercase font-bold">Atk</span>
-                    <div className="flex-1 h-0.5 bg-slate-800 rounded-full mx-1 overflow-hidden">
+                    <span className="text-[7px] text-slate-500 uppercase font-bold">Atk</span>
+                    <div className="flex-1 h-1 bg-slate-800 rounded-full mx-1 overflow-hidden">
                       <div className="h-full bg-indigo-400" style={{ width: `${z.p_attack * 100}%` }} />
                     </div>
-                    <span className="text-[5px] font-mono text-slate-400">{(z.p_attack * 100).toFixed(0)}%</span>
+                    <span className="text-[7px] font-mono text-slate-400">{(z.p_attack * 100).toFixed(0)}%</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[5px] text-slate-500 uppercase font-bold">Suc</span>
-                    <div className="flex-1 h-0.5 bg-slate-800 rounded-full mx-1 overflow-hidden">
+                    <span className="text-[7px] text-slate-500 uppercase font-bold">Suc</span>
+                    <div className="flex-1 h-1 bg-slate-800 rounded-full mx-1 overflow-hidden">
                       <div className="h-full bg-emerald-400" style={{ width: `${z.p_success * 100}%` }} />
                     </div>
-                    <span className="text-[5px] font-mono text-slate-400">{(z.p_success * 100).toFixed(0)}%</span>
+                    <span className="text-[7px] font-mono text-slate-400">{(z.p_success * 100).toFixed(0)}%</span>
                   </div>
                 </div>
 
                 {/* Mini Stats Overlay on Hover */}
                 <div className="absolute inset-0 bg-slate-900/95 opacity-0 group-hover:opacity-100 transition-all duration-200 flex flex-col items-center justify-center p-2 pointer-events-none scale-95 group-hover:scale-100">
-                  <div className="text-[8px] font-bold text-white mb-1 border-b border-slate-800 pb-1 w-full text-center">{z.id}: {z.name}</div>
+                  <div className="text-[10px] font-bold text-white mb-1 border-b border-slate-800 pb-1 w-full text-center">{z.id}: {z.name}</div>
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full">
                     <div className="flex flex-col items-center">
-                      <span className="text-[5px] text-slate-500 uppercase font-bold">Allied</span>
-                      <span className="text-[8px] font-bold text-indigo-400">{z.ours}</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">Allied</span>
+                      <span className="text-[10px] font-bold text-indigo-400">{z.ours}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[5px] text-slate-500 uppercase font-bold">Enemy</span>
-                      <span className="text-[8px] font-bold text-rose-400">{z.enemy}</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">Enemy</span>
+                      <span className="text-[10px] font-bold text-rose-400">{z.enemy}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[5px] text-slate-500 uppercase font-bold">Supply</span>
-                      <span className="text-[8px] font-bold text-amber-400">{z.supply}</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">Supply</span>
+                      <span className="text-[10px] font-bold text-amber-400">{z.supply}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[5px] text-slate-500 uppercase font-bold">Value</span>
-                      <span className="text-[8px] font-bold text-emerald-400">{z.value}</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">Value</span>
+                      <span className="text-[10px] font-bold text-emerald-400">{z.value}</span>
                     </div>
                   </div>
                   <div className="mt-1 text-[5px] font-mono text-slate-500 uppercase">Click to Edit</div>

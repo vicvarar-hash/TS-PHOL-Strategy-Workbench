@@ -15,7 +15,7 @@ export const Onboarding: React.FC = () => {
   const steps = [
     {
       title: "Step 1: Configure Scenario",
-      description: "Set the zone count and seed in the Scenario tab. This defines the operational theater for the simulation.",
+      description: "Set the zone count and seed. This defines the operational theater and initializes the underlying battlefield signals.",
       icon: Target,
       color: "text-indigo-400"
     },
@@ -26,27 +26,27 @@ export const Onboarding: React.FC = () => {
       color: "text-emerald-400"
     },
     {
-      title: "Step 3: Apply Recommendations",
-      description: "Review the top 3 AI suggestions and apply one or more actions. Each action has a deterministic impact on the zone state.",
-      icon: Shield,
-      color: "text-amber-400"
-    },
-    {
-      title: "Step 4: Verify Proofs",
-      description: "Inspect the machine-checkable proof artifacts to understand the logical chain behind every AI recommendation.",
+      title: "Step 3: Review & Validate",
+      description: "Review the top AI suggestions. Validate the confidence math or use the Gemini AI Explainer to confirm the reasoning.",
       icon: Network,
       color: "text-indigo-400"
     },
     {
-      title: "Step 5: Advance Turn",
-      description: "Commit the turn to see tactical consequences. The simulation updates based on applied actions and environmental drift.",
+      title: "Step 4: Apply Actions",
+      description: "Apply one or more recommended actions or directly modify ML signals in the map grid.",
+      icon: Shield,
+      color: "text-amber-400"
+    },
+    {
+      title: "Step 5: Next Turn",
+      description: "Commit the turn to see tactical consequences. Intelligence updates and ML signal drifts will be reported automatically.",
       icon: RefreshCw,
       color: "text-rose-400"
     }
   ];
 
   if (!isOpen) return (
-    <button 
+    <button
       onClick={() => setIsOpen(true)}
       className="fixed bottom-6 right-6 w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg shadow-indigo-500/40 hover:scale-110 transition-transform z-50"
     >
@@ -56,7 +56,7 @@ export const Onboarding: React.FC = () => {
 
   return (
     <AnimatePresence>
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -71,7 +71,7 @@ export const Onboarding: React.FC = () => {
             <X size={16} />
           </button>
         </div>
-        
+
         <div className="p-6 space-y-4">
           <div className="flex items-center gap-4">
             <div className={cn("w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center shadow-inner", steps[step].color)}>
@@ -86,20 +86,20 @@ export const Onboarding: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           <p className="text-xs text-slate-400 leading-relaxed min-h-[48px]">
             {steps[step].description}
           </p>
-          
+
           <div className="flex items-center justify-between pt-2">
-            <button 
+            <button
               onClick={() => setStep(s => Math.max(0, s - 1))}
               disabled={step === 0}
               className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 disabled:opacity-0 transition-all"
             >
               Back
             </button>
-            <button 
+            <button
               onClick={() => step === steps.length - 1 ? setIsOpen(false) : setStep(s => s + 1)}
               className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded-lg transition-all"
             >

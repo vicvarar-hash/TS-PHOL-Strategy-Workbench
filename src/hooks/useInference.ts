@@ -33,6 +33,9 @@ export function useInference() {
   const [seed, setSeed] = useState<string>(Math.random().toString(36).substring(7));
   const [turn, setTurn] = useState(1);
   const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
+  const [initialHealth, setInitialHealth] = useState(0);
+  const [currentHealth, setCurrentHealth] = useState(0);
+  const [healthDetails, setHealthDetails] = useState({ base: 100, pos: 0, neg: 0 });
   const [isStale, setIsStale] = useState(false);
   const [isGeneratingHypothesis, setIsGeneratingHypothesis] = useState(false);
 
@@ -40,22 +43,33 @@ export function useInference() {
 
   const initZones = useCallback((n: number, customSeed?: string) => {
     const activeSeed = customSeed || seed;
-    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn; 
+    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn;
     const rng = mulberry32(rngSeed);
 
-    const newZones: ZoneState[] = Array.from({ length: n }, (_, i) => ({
-      id: `Z${i + 1}`,
-      name: ZONE_NAMES[i % ZONE_NAMES.length],
-      ours: Math.floor(rng() * 20),
-      enemy: Math.floor(rng() * 15),
-      supply: Math.floor(rng() * 100),
-      value: Math.floor(rng() * 100),
-      fog: rng() > 0.7,
-      p_attack: rng(),
-      p_success: rng(),
-    }));
+    const newZones: ZoneState[] = Array.from({ length: n }, (_, i) => {
+      const ours = Math.floor(rng() * 20);
+      const enemy = Math.floor(rng() * 15);
+      const supply = Math.floor(rng() * 100);
+      const value = Math.floor(rng() * 100);
+
+      return {
+        id: `Z${i + 1}`,
+        name: ZONE_NAMES[i % ZONE_NAMES.length],
+        ours,
+        enemy,
+        supply,
+        value,
+        fog: rng() > 0.7,
+        p_attack: rng(),
+        p_success: rng()
+      };
+    });
     setZones(newZones);
     setIsStale(true);
+    // Reset initial health so it recalculated on first inference
+    setInitialHealth(0);
+    setCurrentHealth(0);
+    setHealthDetails({ base: 100, pos: 0, neg: 0 });
     return newZones;
   }, [seed, turn]);
 
@@ -84,96 +98,138 @@ export function useInference() {
     setHypotheses(prev => prev.filter(item => item.id !== h.id));
   }, []);
 
-  const runBenchmark = useCallback(async () => {
-    const metrics: ScalingMetric[] = [];
+  const runBenchmark = useCallback(async (customMaxZones?: number) => {
     const scaler = new ScalingMetrics(rules);
-    const sizes = [4, 8, 16, 32, 64];
-    
+    const limit = customMaxZones || 64;
+    const currentRunId = `Run ${new Set(scalingMetrics.map(m => m.runId)).size + 1}`;
+
+    // Generate sizes: 4, 8, 16, ..., up to limit
+    const sizes = [4];
+    let s = 8;
+    while (s <= limit) {
+      sizes.push(s);
+      s *= 2;
+    }
+    // Add the exact limit if not already present
+    if (sizes[sizes.length - 1] !== limit && limit > 4) {
+      sizes.push(limit);
+    }
+
+    const newMetrics: ScalingMetric[] = [];
     for (const size of sizes) {
       const m = await scaler.runBenchmark(size);
-      metrics.push(m);
+      newMetrics.push({ ...m, runId: currentRunId });
     }
-    setScalingMetrics(metrics);
-  }, [rules]);
+    setScalingMetrics(prev => [...prev, ...newMetrics]);
+  }, [rules, scalingMetrics]);
 
   const advanceTurn = useCallback(() => {
     const rngSeed = (parseInt(seed, 36) || 12345) + turn + 999;
     const rng = mulberry32(rngSeed);
-    const report: TurnReport = { 
-      turn: turn, 
+    const report: TurnReport = {
+      turn: turn,
       changes: [],
       summary: `Strategic Turn ${turn} complete. Intelligence updates processed.`
     };
-    
+
     const nextZones = zones.map(z => {
       const roll = rng();
       let newZ = { ...z };
-      
+
       if (roll < 0.15) {
         const amount = Math.floor(rng() * 5) + 1;
         newZ.enemy += amount;
-        report.changes.push({ 
-          zoneId: z.id, 
-          zoneName: z.name, 
-          type: 'reinforcement', 
+        report.changes.push({
+          zoneId: z.id,
+          zoneName: z.name,
+          type: 'reinforcement',
           description: `Enemy reinforcements (+${amount}) detected.`,
           impact: "Increased risk level."
         });
       } else if (roll < 0.3) {
         const amount = Math.floor(rng() * 3) + 1;
         newZ.ours = Math.max(0, newZ.ours - amount);
-        report.changes.push({ 
-          zoneId: z.id, 
-          zoneName: z.name, 
-          type: 'attrition', 
+        report.changes.push({
+          zoneId: z.id,
+          zoneName: z.name,
+          type: 'attrition',
           description: `Allied attrition (-${amount}) reported.`,
           impact: "Reduced defensive capability."
         });
       } else if (roll < 0.4) {
         newZ.fog = !newZ.fog;
-        report.changes.push({ 
-          zoneId: z.id, 
-          zoneName: z.name, 
-          type: 'intel', 
+        report.changes.push({
+          zoneId: z.id,
+          zoneName: z.name,
+          type: 'intel',
           description: newZ.fog ? "Satellite link lost. Fog of war active." : "Intel clear. Fog of war lifted.",
           impact: "Intelligence reliability shifted."
         });
       }
-      
+
+      const oldPAttack = newZ.p_attack;
+      const oldPSuccess = newZ.p_success;
       newZ.p_attack = Math.max(0, Math.min(1, newZ.p_attack + (rng() - 0.5) * 0.1));
       newZ.p_success = Math.max(0, Math.min(1, newZ.p_success + (rng() - 0.5) * 0.1));
-      
+
+      const deltaAttack = newZ.p_attack - oldPAttack;
+      const deltaSuccess = newZ.p_success - oldPSuccess;
+
+      if (Math.abs(deltaAttack) > 0.02 || Math.abs(deltaSuccess) > 0.02) {
+        report.changes.push({
+          zoneId: z.id,
+          zoneName: z.name,
+          type: 'intel',
+          description: `ML Signals updated: p_attack ${deltaAttack > 0 ? '+' : ''}${deltaAttack.toFixed(2)}, p_success ${deltaSuccess > 0 ? '+' : ''}${deltaSuccess.toFixed(2)}`,
+          impact: "Neural network perception drift."
+        });
+      }
+
       return newZ;
     });
 
     setZones(nextZones);
+
+    // Silently run inference to calculate Health Index for next turn
+    const engine = new TSPHOL_Engine(nextZones, rules);
+    const { facts } = engine.runInference(pAttackThreshold);
+    const posFacts = facts.filter(f => ['Execute', 'Defend', 'Reinforce', 'Hold', 'Allied'].includes(f.predicate)).length;
+    const negFacts = facts.filter(f => ['Vulnerable', 'Hostile', 'Strong'].includes(f.predicate)).length;
+    const computedHealth = 100 + (posFacts * 10) - (negFacts * 10);
+
+    setCurrentHealth(computedHealth);
+    setHealthDetails({ base: 100, pos: posFacts, neg: negFacts });
+
     setTurn(prev => prev + 1);
     setLastTurnReport(report);
     setIsStale(true);
     return report;
-  }, [zones, turn, seed]);
+  }, [zones, turn, seed, rules, pAttackThreshold]);
 
   const applyRecommendation = useCallback((action: string, zoneId: string) => {
-    setZones(prev => prev.map(z => {
-      if (z.id !== zoneId) return z;
-      const newZ = { ...z };
-      if (action === 'Attack') {
-        newZ.enemy = Math.max(0, Math.round(newZ.enemy * 0.6) - 5);
-        newZ.ours = Math.max(0, newZ.ours - 2);
-        newZ.p_success = Math.min(1, newZ.p_success + 0.1);
-      } else if (action === 'Defend') {
-        newZ.ours += 5;
-        newZ.enemy = Math.max(0, newZ.enemy - 2);
-        newZ.p_attack = Math.max(0, newZ.p_attack - 0.1);
-      } else if (action === 'Reinforce') {
-        newZ.ours += 10;
-        newZ.supply = Math.max(0, newZ.supply - 15);
-      } else if (action === 'Hold') {
-        newZ.supply = Math.min(100, newZ.supply + 10);
-        newZ.ours = Math.min(100, newZ.ours + 1);
-      }
-      return newZ;
-    }));
+    setZones(prev => {
+      const newZones = prev.map(z => {
+        if (z.id !== zoneId) return z;
+        const newZ = { ...z };
+        if (action === 'Attack') {
+          newZ.enemy = Math.max(0, Math.round(newZ.enemy * 0.6) - 5);
+          newZ.ours = Math.max(0, newZ.ours - 2);
+          newZ.p_success = Math.min(1, newZ.p_success + 0.1);
+        } else if (action === 'Defend') {
+          newZ.ours += 5;
+          newZ.enemy = Math.max(0, newZ.enemy - 2);
+          newZ.p_attack = Math.max(0, newZ.p_attack - 0.1);
+        } else if (action === 'Reinforce') {
+          newZ.ours += 10;
+          newZ.supply = Math.max(0, newZ.supply - 15);
+        } else if (action === 'Hold') {
+          newZ.supply = Math.min(100, newZ.supply + 10);
+          newZ.ours = Math.min(100, newZ.ours + 1);
+        }
+        return newZ;
+      });
+      return newZones;
+    });
     setIsStale(true);
   }, []);
 
@@ -202,10 +258,10 @@ export function useInference() {
   const runInference = async (silent: boolean = false) => {
     if (!silent) setIsInferring(true);
     if (!silent) setCurrentStep('ml');
-    
+
     await new Promise(r => setTimeout(r, 400));
     if (!silent) setCurrentStep('hypothesis');
-    
+
     const engine = new TSPHOL_Engine(zones, rules);
     const val = engine.validateRules();
     setValidation(val);
@@ -224,13 +280,25 @@ export function useInference() {
     const start = performance.now();
     const { facts, firings } = engine.runInference(pAttackThreshold);
     const end = performance.now();
-    
+
     if (!silent) await new Promise(r => setTimeout(r, 400));
     if (!silent) setCurrentStep('decision');
 
     setInferredFacts(facts);
     setIsStale(false);
-    
+
+    // Calculate new Health Index based on facts
+    const posFacts = facts.filter(f => ['Execute', 'Defend', 'Reinforce', 'Hold', 'Allied'].includes(f.predicate)).length;
+    const negFacts = facts.filter(f => ['Vulnerable', 'Hostile', 'Strong'].includes(f.predicate)).length;
+    const computedHealth = 100 + (posFacts * 10) - (negFacts * 10);
+
+    setCurrentHealth(computedHealth);
+    setHealthDetails({ base: 100, pos: posFacts, neg: negFacts });
+
+    if (initialHealth === 0) {
+      setInitialHealth(computedHealth);
+    }
+
     const decisions = facts.filter(f => f.predicate === 'Execute');
     const bestDecision = decisions.sort((a, b) => b.probability - a.probability)[0];
 
@@ -239,7 +307,7 @@ export function useInference() {
 
     if (!silent) {
       setIsInferring(false);
-      
+
       const getDepth = (f: GroundedFact): number => 1 + (f.childFacts.length > 0 ? Math.max(...f.childFacts.map(getDepth)) : 0);
       const maxDepth = facts.length > 0 ? Math.max(...facts.map(getDepth)) : 0;
 
@@ -258,22 +326,20 @@ export function useInference() {
     zones, setZones,
     rules, setRules,
     hypotheses, setHypotheses,
-    proposeHypothesis, acceptHypothesis, rejectHypothesis,
-    validation, setValidation,
-    inferredFacts, setInferredFacts,
-    scalingMetrics, setScalingMetrics,
-    runBenchmark,
     isInferring, setIsInferring,
     isGeneratingHypothesis,
     isStale, setIsStale,
+    proposeHypothesis, acceptHypothesis, rejectHypothesis,
+    validation, setValidation,
+    inferredFacts,
+    scalingMetrics, setScalingMetrics,
+    runBenchmark,
+    initialHealth, currentHealth, healthDetails,
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,
     turn, advanceTurn, resetSession, lastTurnReport,
     initZones,
-    runInference,
-    updateZoneML,
-    applyRecommendation
+    runInference, applyRecommendation, updateZoneML,
   };
 }
-

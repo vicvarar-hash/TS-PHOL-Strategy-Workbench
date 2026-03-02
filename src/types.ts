@@ -13,6 +13,7 @@ export interface ZoneState {
   fog: boolean;
   p_attack: number; // ML Output 1
   p_success: number; // ML Output 2
+  healthIndex?: number;
 }
 
 export interface LogicRule {
@@ -57,6 +58,7 @@ export interface ScalingMetric {
   numFacts: number;
   numFirings: number;
   proofDepth: number;
+  runId?: string;
 }
 
 export interface ScalingExplanation {
@@ -66,7 +68,7 @@ export interface ScalingExplanation {
 }
 
 export type GamePhase = 'awaiting_inference' | 'reviewing_recommendations' | 'turn_result';
-export type TabType = 'scenario' | 'ml' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling';
+export type TabType = 'scenario' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling';
 
 export interface ScenarioData {
   zones: ZoneState[];
