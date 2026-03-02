@@ -1,7 +1,7 @@
 # TS-PHOL Strategy Workbench
 
 ## What problem this solves
-Adversarial Reasoning (AR) systems often face a tradeoff between **expressiveness** (how complex the rules can be) and **tractability** (how fast the system can reason). Standard Higher-Order Logics are often undecidable or exponential in complexity.
+Automated Reasoning (AR) systems often face a tradeoff between **expressiveness** (how complex the rules can be) and **tractability** (how fast the system can reason). Standard Higher-Order Logics are often undecidable or exponential in complexity.
 
 **TS-PHOL** (Tractable Stratified Probabilistic Higher-Order Logic) solves this by:
 1. **Enforcing PTIME Complexity**: Using a restricted logical fragment that guarantees polynomial-time inference.
