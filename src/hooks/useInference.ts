@@ -33,9 +33,6 @@ export function useInference() {
   const [seed, setSeed] = useState<string>(Math.random().toString(36).substring(7));
   const [turn, setTurn] = useState(1);
   const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
-  const [initialHealth, setInitialHealth] = useState(0);
-  const [currentHealth, setCurrentHealth] = useState(0);
-  const [healthDetails, setHealthDetails] = useState({ base: 100, pos: 0, neg: 0 });
   const [isStale, setIsStale] = useState(false);
   const [isGeneratingHypothesis, setIsGeneratingHypothesis] = useState(false);
 
@@ -43,7 +40,7 @@ export function useInference() {
 
   const initZones = useCallback((n: number, customSeed?: string) => {
     const activeSeed = customSeed || seed;
-    const rngSeed = (parseInt(activeSeed, 36) || 12345) + turn;
+    const rngSeed = parseInt(activeSeed, 36) || 12345;
     const rng = mulberry32(rngSeed);
 
     const newZones: ZoneState[] = Array.from({ length: n }, (_, i) => {
@@ -66,12 +63,8 @@ export function useInference() {
     });
     setZones(newZones);
     setIsStale(true);
-    // Reset initial health so it recalculated on first inference
-    setInitialHealth(0);
-    setCurrentHealth(0);
-    setHealthDetails({ base: 100, pos: 0, neg: 0 });
     return newZones;
-  }, [seed, turn]);
+  }, [seed]);
 
   const proposeHypothesis = useCallback(async (useLLM: boolean = false) => {
     if (useLLM) {
@@ -123,82 +116,79 @@ export function useInference() {
     setScalingMetrics(prev => [...prev, ...newMetrics]);
   }, [rules, scalingMetrics]);
 
-  const advanceTurn = useCallback(() => {
+  const advanceTurn = useCallback((intelligenceEnabled: boolean = true) => {
     const rngSeed = (parseInt(seed, 36) || 12345) + turn + 999;
     const rng = mulberry32(rngSeed);
     const report: TurnReport = {
       turn: turn,
       changes: [],
-      summary: `Strategic Turn ${turn} complete. Intelligence updates processed.`
+      summary: intelligenceEnabled
+        ? `Strategic Turn ${turn} complete. Intelligence updates processed.`
+        : `Strategic Turn ${turn} complete. Intelligence gathering disabled.`
     };
 
-    const nextZones = zones.map(z => {
-      const roll = rng();
-      let newZ = { ...z };
+    let nextZones = [...zones];
 
-      if (roll < 0.15) {
-        const amount = Math.floor(rng() * 5) + 1;
-        newZ.enemy += amount;
-        report.changes.push({
-          zoneId: z.id,
-          zoneName: z.name,
-          type: 'reinforcement',
-          description: `Enemy reinforcements (+${amount}) detected.`,
-          impact: "Increased risk level."
-        });
-      } else if (roll < 0.3) {
-        const amount = Math.floor(rng() * 3) + 1;
-        newZ.ours = Math.max(0, newZ.ours - amount);
-        report.changes.push({
-          zoneId: z.id,
-          zoneName: z.name,
-          type: 'attrition',
-          description: `Allied attrition (-${amount}) reported.`,
-          impact: "Reduced defensive capability."
-        });
-      } else if (roll < 0.4) {
-        newZ.fog = !newZ.fog;
-        report.changes.push({
-          zoneId: z.id,
-          zoneName: z.name,
-          type: 'intel',
-          description: newZ.fog ? "Satellite link lost. Fog of war active." : "Intel clear. Fog of war lifted.",
-          impact: "Intelligence reliability shifted."
-        });
-      }
+    if (intelligenceEnabled) {
+      nextZones = zones.map(z => {
+        const roll = rng();
+        let newZ = { ...z };
 
-      const oldPAttack = newZ.p_attack;
-      const oldPSuccess = newZ.p_success;
-      newZ.p_attack = Math.max(0, Math.min(1, newZ.p_attack + (rng() - 0.5) * 0.1));
-      newZ.p_success = Math.max(0, Math.min(1, newZ.p_success + (rng() - 0.5) * 0.1));
+        if (roll < 0.15) {
+          const amount = Math.floor(rng() * 5) + 1;
+          newZ.enemy += amount;
+          report.changes.push({
+            zoneId: z.id,
+            zoneName: z.name,
+            type: 'reinforcement',
+            description: `Enemy reinforcements (+${amount}) detected.`,
+            impact: "Increased risk level."
+          });
+        } else if (roll < 0.3) {
+          const amount = Math.floor(rng() * 3) + 1;
+          newZ.ours = Math.max(0, newZ.ours - amount);
+          report.changes.push({
+            zoneId: z.id,
+            zoneName: z.name,
+            type: 'attrition',
+            description: `Allied attrition (-${amount}) reported.`,
+            impact: "Reduced defensive capability."
+          });
+        } else if (roll < 0.4) {
+          newZ.fog = !newZ.fog;
+          report.changes.push({
+            zoneId: z.id,
+            zoneName: z.name,
+            type: 'intel',
+            description: newZ.fog ? "Satellite link lost. Fog of war active." : "Intel clear. Fog of war lifted.",
+            impact: "Intelligence reliability shifted."
+          });
+        }
 
-      const deltaAttack = newZ.p_attack - oldPAttack;
-      const deltaSuccess = newZ.p_success - oldPSuccess;
+        const oldPAttack = newZ.p_attack;
+        const oldPSuccess = newZ.p_success;
+        newZ.p_attack = Math.max(0, Math.min(1, newZ.p_attack + (rng() - 0.5) * 0.1));
+        newZ.p_success = Math.max(0, Math.min(1, newZ.p_success + (rng() - 0.5) * 0.1));
 
-      if (Math.abs(deltaAttack) > 0.02 || Math.abs(deltaSuccess) > 0.02) {
-        report.changes.push({
-          zoneId: z.id,
-          zoneName: z.name,
-          type: 'intel',
-          description: `ML Signals updated: p_attack ${deltaAttack > 0 ? '+' : ''}${deltaAttack.toFixed(2)}, p_success ${deltaSuccess > 0 ? '+' : ''}${deltaSuccess.toFixed(2)}`,
-          impact: "Neural network perception drift."
-        });
-      }
+        const deltaAttack = newZ.p_attack - oldPAttack;
+        const deltaSuccess = newZ.p_success - oldPSuccess;
 
-      return newZ;
-    });
+        if (Math.abs(deltaAttack) > 0.02 || Math.abs(deltaSuccess) > 0.02) {
+          report.changes.push({
+            zoneId: z.id,
+            zoneName: z.name,
+            type: 'intel',
+            description: `ML Signals updated: p_attack ${deltaAttack > 0 ? '+' : ''}${deltaAttack.toFixed(2)}, p_success ${deltaSuccess > 0 ? '+' : ''}${deltaSuccess.toFixed(2)}`,
+            impact: "Neural network perception drift."
+          });
+        }
+
+        return newZ;
+      });
+    }
 
     setZones(nextZones);
-
-    // Silently run inference to calculate Health Index for next turn
-    const engine = new TSPHOL_Engine(nextZones, rules);
-    const { facts } = engine.runInference(pAttackThreshold);
-    const posFacts = facts.filter(f => ['Execute', 'Defend', 'Reinforce', 'Hold', 'Allied'].includes(f.predicate)).length;
-    const negFacts = facts.filter(f => ['Vulnerable', 'Hostile', 'Strong'].includes(f.predicate)).length;
-    const computedHealth = 100 + (posFacts * 10) - (negFacts * 10);
-
-    setCurrentHealth(computedHealth);
-    setHealthDetails({ base: 100, pos: posFacts, neg: negFacts });
+    setInferredFacts([]); // Clear AI recommendations on next turn
 
     setTurn(prev => prev + 1);
     setLastTurnReport(report);
@@ -241,9 +231,9 @@ export function useInference() {
   const resetSession = useCallback(() => {
     setTurn(1);
     setLastTurnReport(null);
-    initZones(numZones);
+    setSeed(Math.random().toString(36).substring(7));
     setIsStale(true);
-  }, [numZones, initZones]);
+  }, []);
 
   useEffect(() => {
     initZones(numZones);
@@ -287,17 +277,7 @@ export function useInference() {
     setInferredFacts(facts);
     setIsStale(false);
 
-    // Calculate new Health Index based on facts
-    const posFacts = facts.filter(f => ['Execute', 'Defend', 'Reinforce', 'Hold', 'Allied'].includes(f.predicate)).length;
-    const negFacts = facts.filter(f => ['Vulnerable', 'Hostile', 'Strong'].includes(f.predicate)).length;
-    const computedHealth = 100 + (posFacts * 10) - (negFacts * 10);
 
-    setCurrentHealth(computedHealth);
-    setHealthDetails({ base: 100, pos: posFacts, neg: negFacts });
-
-    if (initialHealth === 0) {
-      setInitialHealth(computedHealth);
-    }
 
     const decisions = facts.filter(f => f.predicate === 'Execute');
     const bestDecision = decisions.sort((a, b) => b.probability - a.probability)[0];
@@ -334,7 +314,7 @@ export function useInference() {
     inferredFacts,
     scalingMetrics, setScalingMetrics,
     runBenchmark,
-    initialHealth, currentHealth, healthDetails,
+
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,

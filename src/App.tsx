@@ -215,112 +215,6 @@ const HypothesisGeneratorView: React.FC<{
   </div>
 );
 
-const ValidatorView: React.FC<{ validation: ValidationResult, rules: LogicRule[] }> = ({ validation, rules }) => (
-  <div className="space-y-6">
-    <TabHeader
-      title="Structural Fragment Validator"
-      description="TS-PHOL enforces strict structural constraints to guarantee polynomial-time inference and prevent logical paradoxes. Every rule is checked before the reasoning engine executes."
-      icon={<Shield size={20} />}
-    />
-
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-4">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              Rule Validation Status
-            </h3>
-            <div className="flex items-center gap-4">
-              <ExplainButton
-                context="ruleset"
-                data={{ rules }}
-                className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 scale-90 origin-right"
-              />
-              <div className={cn(
-                "px-3 py-1 rounded-full text-[10px] font-bold font-mono flex items-center gap-2",
-                validation.valid ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-              )}>
-                {validation.valid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-                {validation.valid ? "ALL RULES VALID" : "VALIDATION ERRORS DETECTED"}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {rules.map(rule => (
-              <div key={rule.id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl flex items-center justify-between group">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono text-indigo-400 font-bold">{rule.id}</span>
-                    <span className="text-xs font-mono text-white">{rule.head} ← {rule.body.join(', ')}</span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">{rule.description}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <span className="text-[9px] font-mono text-emerald-500 font-bold uppercase">Passed</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {!validation.valid && (
-          <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 animate-in shake duration-500 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/10 blur-3xl rounded-full pointer-events-none" />
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-                <AlertCircle size={16} /> Critical Violations
-              </h3>
-              <ExplainButton
-                context="validator"
-                data={{ errors: validation.errors, rules }}
-                className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30"
-              />
-            </div>
-            <div className="space-y-2 relative z-10">
-              {validation.errors.map((err, i) => (
-                <div key={i} className="flex items-start gap-3 text-xs text-rose-300 font-mono">
-                  <span className="text-rose-500 mt-0.5">▶</span>
-                  {err}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Fragment Constraints</h3>
-          <div className="space-y-4">
-            {[
-              { label: "Range Restriction", desc: "All head variables must appear in body literals.", status: true },
-              { label: "Bounded Arity", desc: "Predicates limited to maximum 2 arguments.", status: true },
-              { label: "Stratification", desc: "No cyclic negation or recursive dependencies.", status: true },
-              { label: "Polynomial Bound", desc: "Inference complexity is O(N^k) where k is arity.", status: true },
-            ].map((c, i) => (
-              <div key={i} className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-300 uppercase">{c.label}</span>
-                  <CheckCircle2 size={12} className="text-emerald-500" />
-                </div>
-                <p className="text-[10px] text-slate-500 leading-relaxed">{c.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Why Validate?</h3>
-          <p className="text-[10px] text-slate-400 leading-relaxed">
-            Unrestricted logic can lead to infinite loops or exponential blowup. TS-PHOL guarantees that even with 1000s of zones, the system will respond in predictable, polynomial time.
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-);
 
 const ScalingView: React.FC<{
   metrics: ScalingMetric[],
@@ -909,7 +803,6 @@ export default function App() {
     inferredFacts,
     scalingMetrics, setScalingMetrics,
     runBenchmark,
-    initialHealth, currentHealth, healthDetails,
     currentStep, setCurrentStep,
     pAttackThreshold, setPAttackThreshold,
     seed, setSeed,
@@ -940,6 +833,8 @@ export default function App() {
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [newRule, setNewRule] = useState<LogicRule>({ id: 'R_NEW', head: '', body: [], probability: 0.9, stratum: 1 });
   const [isConvertingIntent, setIsConvertingIntent] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [editingRule, setEditingRule] = useState<LogicRule | null>(null);
 
   // Initialize maxArityBenchmark based on current rules
   useEffect(() => {
@@ -1019,7 +914,7 @@ export default function App() {
       generated: prev.generated + inferredFacts.length
     }));
 
-    advanceTurn();
+    advanceTurn(isIntelligenceEnabled);
 
     // Reset for next turn
     setAppliedFactIds([]);
@@ -1064,6 +959,30 @@ export default function App() {
     addLog(`Added custom rule: ${newRule.head} <- ${newRule.body.join(', ')}`);
     setNewRule({ id: `R_CUSTOM_${Date.now().toString().slice(-4)}`, head: '', body: [], probability: 0.9, stratum: 1 });
   };
+
+  const deleteRule = (id: string) => {
+    setRules(rules.filter(r => r.id !== id));
+    addLog(`Deleted rule ${id}`);
+  };
+
+  const startEditRule = (rule: LogicRule) => {
+    setEditingRuleId(rule.id);
+    setEditingRule({ ...rule });
+  };
+
+  const saveEditRule = () => {
+    if (!editingRule) return;
+    setRules(rules.map(r => r.id === editingRule.id ? editingRule : r));
+    setEditingRuleId(null);
+    setEditingRule(null);
+    addLog(`Updated rule ${editingRule.id}`);
+  };
+
+  const cancelEditRule = () => {
+    setEditingRuleId(null);
+    setEditingRule(null);
+  };
+
 
   const handleProposeIntent = async () => {
     if (!humanIntent.trim()) return;
@@ -1246,57 +1165,7 @@ export default function App() {
               </label>
             </div>
 
-            {gamePhase === 'awaiting_inference' && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 p-6 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-between"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-indigo-600 flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20">
-                    <Play className="text-white ml-1" size={24} />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white tracking-tight">Awaiting Intelligence Run</h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Execute the TS-PHOL engine to assess tactical situations across {numZones} zones.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-8">
-                  <div className="grid grid-cols-4 md:grid-cols-7 gap-6 pr-4">
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Allied</span>
-                      <span className="text-xl font-bold tracking-tighter text-emerald-400">{zones.reduce((sum, z) => sum + z.ours, 0)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Enemy</span>
-                      <span className="text-xl font-bold tracking-tighter text-rose-400">{zones.reduce((sum, z) => sum + z.enemy, 0)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Supply</span>
-                      <span className="text-xl font-bold tracking-tighter text-amber-400">{zones.reduce((sum, z) => sum + z.supply, 0)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Value</span>
-                      <span className="text-xl font-bold tracking-tighter text-indigo-400">{zones.reduce((sum, z) => sum + z.value, 0)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Avg P_Attack</span>
-                      <span className="text-xl font-bold tracking-tighter text-white">{(zones.reduce((sum, z) => sum + z.p_attack, 0) / (zones.length || 1)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Avg P_Succ</span>
-                      <span className="text-xl font-bold tracking-tighter text-white">{(zones.reduce((sum, z) => sum + z.p_success, 0) / (zones.length || 1)).toFixed(2)}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest mb-1 title text-right">Active Fog</span>
-                      <span className="text-xl font-bold tracking-tighter text-slate-300">{zones.filter(z => z.fog).length}</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+
 
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-4 px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-2xl gap-4">
               <div className="flex items-center gap-4">
@@ -1445,16 +1314,12 @@ export default function App() {
         );
       case 'validator':
         return (
-          <ValidatorView validation={validation} rules={rules} />
-        );
-      case 'inference':
-        return (
           <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="col-span-12 lg:col-span-8 space-y-6">
               <TabHeader
-                title="Knowledge Base"
-                description="Higher-order rules define how ML signals compose into tactical decisions. The engine enforces PTIME tractability."
-                icon={<Layers size={20} />}
+                title="Structural Fragment Validator & Knowledge Base"
+                description="TS-PHOL enforces strict structural constraints to guarantee polynomial-time inference. Here you can edit logic rules and validate the system."
+                icon={<Shield size={20} />}
               />
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-6">
@@ -1499,24 +1364,68 @@ export default function App() {
                 <div className="space-y-3">
                   {rules.map(rule => (
                     <div key={rule.id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-xl group relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-mono text-indigo-400 font-bold">{rule.id}</span>
-                        <div className="flex gap-2">
-                          <span className="text-[9px] px-2 py-0.5 rounded bg-slate-700 text-slate-400 font-mono">STRATUM {rule.stratum}</span>
+                      {editingRuleId === rule.id && editingRule ? (
+                        <div className="space-y-4 animate-in zoom-in-95 duration-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-indigo-400 font-bold">Editing {rule.id}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono text-slate-500 uppercase">Head</label>
+                              <input
+                                value={editingRule.head}
+                                onChange={e => setEditingRule({ ...editingRule, head: e.target.value })}
+                                className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs font-mono text-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono text-slate-500 uppercase">Stratum</label>
+                              <input
+                                type="number"
+                                value={editingRule.stratum}
+                                onChange={e => setEditingRule({ ...editingRule, stratum: parseInt(e.target.value) })}
+                                className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs font-mono text-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-mono text-slate-500 uppercase">Body (comma separated)</label>
+                            <input
+                              value={editingRule.body.join(', ')}
+                              onChange={e => setEditingRule({ ...editingRule, body: e.target.value.split(',').map(s => s.trim()) })}
+                              className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs font-mono text-white"
+                            />
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button onClick={saveEditRule} className="py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold rounded transition-all">SAVE CHANGES</button>
+                            <button onClick={cancelEditRule} className="py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold rounded transition-all">CANCEL</button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-sm font-mono text-white mb-2">
-                        {rule.head} <span className="text-slate-500 mx-2">←</span> {rule.body.join(', ')}
-                      </div>
-                      {rule.description && (
-                        <p className="text-[11px] text-slate-500 italic leading-relaxed border-t border-slate-800/50 pt-2">
-                          {rule.description}
-                        </p>
+                      ) : (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-mono text-indigo-400 font-bold">{rule.id}</span>
+                            <div className="flex gap-2">
+                              <button onClick={() => startEditRule(rule)} className="text-[9px] px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-white font-mono transition-colors">EDIT</button>
+                              <button onClick={() => deleteRule(rule.id)} className="text-[9px] px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 font-mono transition-colors">DELETE</button>
+                              <span className="text-[9px] px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400 font-mono ml-2">STRATUM {rule.stratum}</span>
+                            </div>
+                          </div>
+                          <div className="text-sm font-mono text-white mb-2">
+                            {rule.head} <span className="text-slate-500 mx-2">←</span> {rule.body.join(', ')}
+                          </div>
+                          {rule.description && (
+                            <p className="text-[11px] text-slate-500 italic leading-relaxed border-t border-slate-800/50 pt-2">
+                              {rule.description}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
+
                   {isAddingRule ? (
-                    <div className="p-6 bg-slate-900 border border-indigo-500/50 rounded-2xl space-y-4 animate-in zoom-in-95 duration-200">
+                    <div className="p-6 bg-slate-900 border border-indigo-500/50 rounded-2xl space-y-4 animate-in zoom-in-95 duration-200 mt-6">
                       <h4 className="text-xs font-bold text-white uppercase tracking-widest">Add Custom Rule</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
@@ -1565,14 +1474,15 @@ export default function App() {
                   ) : (
                     <button
                       onClick={() => setIsAddingRule(true)}
-                      className="w-full py-4 border-2 border-dashed border-slate-800 rounded-xl text-slate-600 hover:text-indigo-400 hover:border-indigo-400/50 transition-all flex items-center justify-center gap-2 text-xs font-mono"
+                      className="w-full py-4 border-2 border-dashed border-slate-800 rounded-xl text-slate-600 hover:text-indigo-400 hover:border-indigo-400/50 transition-all flex items-center justify-center gap-2 text-xs font-mono mt-4"
                     >
-                      <Zap size={14} /> ADD NEW RULE (BREAK THE SYSTEM)
+                      <Zap size={14} /> ADD NEW RULE
                     </button>
                   )}
                 </div>
               </div>
             </div>
+
             <div className="col-span-12 lg:col-span-4 space-y-6">
               <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-4">Fragment Constraints</h3>
@@ -1587,6 +1497,7 @@ export default function App() {
             </div>
           </div>
         );
+
       case 'proof':
         const topRecs = inferredFacts
           .filter(f => f.predicate === 'Execute' && f.probability > 0.01)
@@ -1711,27 +1622,6 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 px-3 py-1 bg-slate-950/50 rounded-full border border-slate-800">
-            <Activity size={12} className={currentHealth > initialHealth ? "text-emerald-400" : "text-amber-400"} />
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[9px] font-mono text-slate-500 uppercase">Health Index</span>
-              <span className={cn(
-                "text-xs font-bold font-mono",
-                currentHealth > initialHealth ? "text-emerald-400" : currentHealth < initialHealth ? "text-rose-400" : "text-white"
-              )}>
-                {currentHealth.toFixed(1)}
-              </span>
-              <span className="text-[8px] font-mono text-slate-600">/ {initialHealth.toFixed(1)}</span>
-              {Math.abs(currentHealth - initialHealth) > 0 && (
-                <span className={cn(
-                  "text-[9px] font-mono font-bold ml-1",
-                  currentHealth > initialHealth ? "text-emerald-400" : "text-rose-400"
-                )}>
-                  {currentHealth > initialHealth ? '↑' : '↓'} {(((currentHealth - initialHealth) / initialHealth) * 100).toFixed(1)}%
-                </span>
-              )}
-            </div>
-          </div>
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(0,0,0,0.5)] shadow-emerald-500/50" />
             <span className="text-[11px] font-bold text-white uppercase tracking-[0.15em]">
@@ -1796,7 +1686,6 @@ export default function App() {
               { id: 'scenario', label: 'Scenario', icon: Target },
               { id: 'hypothesis', label: 'Hypothesis', icon: BrainCircuit },
               { id: 'validator', label: 'Validator', icon: Shield },
-              { id: 'inference', label: 'Inference', icon: Terminal },
               { id: 'proof', label: 'Proof', icon: Network },
               { id: 'scaling', label: 'Scaling', icon: BarChart3 },
             ].map(tab => (

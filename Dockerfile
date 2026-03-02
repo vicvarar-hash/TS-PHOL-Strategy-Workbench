@@ -13,9 +13,10 @@ RUN npm ci
 COPY . .
 
 # Build the application
-# Note: GEMINI_API_KEY must be passed as an ARG and set as ENV to be baked into the Vite build
+# Note: GEMINI_API_KEY must be passed as an ARG
 ARG GEMINI_API_KEY
-ENV GEMINI_API_KEY=$GEMINI_API_KEY
+RUN echo -n "$GEMINI_API_KEY" | tr -d '\r\n ' > .env.local
+RUN echo "GEMINI_API_KEY=$(cat .env.local)" > .env.local
 RUN npm run build
 
 # Stage 2: Serve the application with Nginx
