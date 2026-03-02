@@ -1,4 +1,5 @@
 # TS-PHOL Strategy Workbench
+Play with it here: https://tsphol-workbench-327290268983.us-central1.run.app/
 
 ## What problem this solves
 Automated Reasoning (AR) systems often face a tradeoff between **expressiveness** (how complex the rules can be) and **tractability** (how fast the system can reason). Standard Higher-Order Logics are often undecidable or exponential in complexity.
