@@ -67,7 +67,7 @@ export interface ScalingExplanation {
   impactNote: string;
 }
 
-export type GamePhase = 'awaiting_inference' | 'reviewing_recommendations' | 'turn_result';
+export type GamePhase = 'awaiting_inference' | 'ai_evaluating' | 'reviewing_recommendations' | 'turn_result';
 export type TabType = 'scenario' | 'hypothesis' | 'validator' | 'inference' | 'proof' | 'scaling';
 
 export interface ScenarioData {

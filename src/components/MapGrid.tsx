@@ -6,15 +6,18 @@
 import React, { useState } from 'react';
 import { Shield, Target, Eye, Edit3, Save, X, Flame, Mountain, Waves, Trees, Landmark } from 'lucide-react';
 import { ZoneState } from '../types';
+import { DomainPreset, DOMAIN_MAPPING } from '../hooks/useInference';
 import { cn } from '../lib/utils';
 
 interface MapGridProps {
   zones: ZoneState[];
+  domain: DomainPreset;
   highlightedZone: string | null;
   onEditZone: (zone: ZoneState) => void;
 }
 
-export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEditZone }) => {
+export const MapGrid: React.FC<MapGridProps> = ({ zones, domain, highlightedZone, onEditZone }) => {
+  const mapping = DOMAIN_MAPPING[domain];
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<ZoneState | null>(null);
 
@@ -57,11 +60,11 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-            <span className="text-[9px] text-slate-400 uppercase font-bold">Allied</span>
+            <span className="text-[9px] text-slate-400 uppercase font-bold">{mapping.allied}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" />
-            <span className="text-[9px] text-slate-400 uppercase font-bold">Enemy</span>
+            <span className="text-[9px] text-slate-400 uppercase font-bold">{mapping.enemy}</span>
           </div>
         </div>
       </div>
@@ -93,7 +96,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Allied</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">{mapping.allied}</label>
                     <input
                       type="number"
                       value={editValues?.ours}
@@ -102,7 +105,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Enemy</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">{mapping.enemy}</label>
                     <input
                       type="number"
                       value={editValues?.enemy}
@@ -111,7 +114,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Supply</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">{mapping.supply}</label>
                     <input
                       type="number"
                       value={editValues?.supply}
@@ -120,7 +123,7 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[7px] text-slate-500 uppercase font-bold">Value</label>
+                    <label className="text-[7px] text-slate-500 uppercase font-bold">{mapping.value}</label>
                     <input
                       type="number"
                       value={editValues?.value}
@@ -217,19 +220,19 @@ export const MapGrid: React.FC<MapGridProps> = ({ zones, highlightedZone, onEdit
                   <div className="text-[10px] font-bold text-white mb-1 border-b border-slate-800 pb-1 w-full text-center">{z.id}: {z.name}</div>
                   <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full">
                     <div className="flex flex-col items-center">
-                      <span className="text-[7px] text-slate-500 uppercase font-bold">Allied</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">{mapping.allied}</span>
                       <span className="text-[10px] font-bold text-indigo-400">{z.ours}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[7px] text-slate-500 uppercase font-bold">Enemy</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">{mapping.enemy}</span>
                       <span className="text-[10px] font-bold text-rose-400">{z.enemy}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[7px] text-slate-500 uppercase font-bold">Supply</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">{mapping.supply}</span>
                       <span className="text-[10px] font-bold text-amber-400">{z.supply}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-[7px] text-slate-500 uppercase font-bold">Value</span>
+                      <span className="text-[7px] text-slate-500 uppercase font-bold">{mapping.value}</span>
                       <span className="text-[10px] font-bold text-emerald-400">{z.value}</span>
                     </div>
                   </div>

@@ -33,7 +33,9 @@ import {
   BookOpen,
   HelpCircle,
   X,
-  BrainCircuit
+  BrainCircuit,
+  Square,
+  TerminalSquare
 } from 'lucide-react';
 import {
   XAxis,
@@ -52,11 +54,11 @@ import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from './lib/utils';
-import { useInference } from './hooks/useInference';
 import { Onboarding } from './components/Onboarding';
 import { DecisionCard } from './components/DecisionCard';
 import { MapGrid } from './components/MapGrid';
 import { TSPHOL_Engine, STRATA_LABELS } from './engine/tsphol';
+import { useInference, DOMAIN_MAPPING, DomainPreset } from './hooks/useInference';
 import { GroundedFact, TabType, GamePhase, LogicRule, ZoneState, TurnReport, ValidationResult, ScalingMetric, ScalingExplanation } from './types';
 
 // --- Components ---
@@ -112,8 +114,10 @@ const HypothesisGeneratorView: React.FC<{
   humanIntent: string,
   onIntentChange: (val: string) => void,
   onProposeIntent: () => void,
-  isConvertingIntent: boolean
-}> = ({ hypotheses, onPropose, onAccept, onReject, isGenerating, humanIntent, onIntentChange, onProposeIntent, isConvertingIntent }) => (
+  isConvertingIntent: boolean,
+  isRetrievingContext: boolean,
+  ragChunks: { source: string, text: string }[]
+}> = ({ hypotheses, onPropose, onAccept, onReject, isGenerating, humanIntent, onIntentChange, onProposeIntent, isConvertingIntent, isRetrievingContext, ragChunks }) => (
   <div className="space-y-6">
     <TabHeader
       title="LLoM Hypothesis Generator"
@@ -183,6 +187,32 @@ const HypothesisGeneratorView: React.FC<{
       </div>
 
       <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <BookOpen size={16} className="text-emerald-400" /> RAG Knowledge Base Context
+        </h3>
+        <div className="h-[300px] bg-slate-950 border border-slate-800 rounded-xl p-4 overflow-y-auto custom-scrollbar font-mono text-xs relative">
+          {ragChunks.length === 0 && !isRetrievingContext && (
+            <div className="absolute inset-0 flex items-center justify-center text-slate-600 italic">
+              Waiting for intent queries to retrieve external context...
+            </div>
+          )}
+          <div className="space-y-3">
+            {ragChunks.map((chunk, i) => (
+              <div key={i} className="animate-in slide-in-from-bottom-2 fade-in duration-500 bg-slate-900 border border-slate-700/50 p-3 rounded flex flex-col gap-1">
+                <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider flex items-center gap-1"><Shield size={10} /> {chunk.source}</span>
+                <span className="text-slate-300 leading-relaxed">"{chunk.text}"</span>
+              </div>
+            ))}
+            {isRetrievingContext && (
+              <div className="text-emerald-400 animate-pulse flex items-center gap-2 text-[10px]">
+                <RefreshCw className="animate-spin" size={12} /> querying vector database for tactical manuals...
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="md:col-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-6 space-y-4">
         <h3 className="text-sm font-bold text-white flex items-center gap-2">
           <Activity size={16} className="text-indigo-400" /> Pending Hypotheses
         </h3>
@@ -761,9 +791,31 @@ const TabHeader: React.FC<{ title: string, description: string, icon: React.Reac
     <div>
       <h3 className="text-sm font-bold text-white flex items-center gap-2">
         {title}
-        <HelpCircle size={14} className="text-slate-600 cursor-help" title="Why am I seeing this?" />
+        <span title="Why am I seeing this?"><HelpCircle size={14} className="text-slate-600 cursor-help" /></span>
       </h3>
       <p className="text-xs text-slate-400 leading-relaxed mt-1">{description}</p>
+    </div>
+  </div>
+);
+
+const ToolExecutionConsole: React.FC<{ currentStep: string }> = ({ currentStep }) => (
+  <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 font-mono text-xs mb-6 relative overflow-hidden shadow-2xl">
+    <div className="absolute top-0 left-0 bottom-0 w-1 bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+    <div className="flex items-center gap-2 mb-4 text-amber-500 border-b border-slate-800 pb-2">
+      <TerminalSquare className="animate-pulse" size={16} />
+      <span className="font-bold tracking-widest uppercase text-[10px]">Sub-Agent Active: ML-Drift Predictor</span>
+    </div>
+    <div className="space-y-2 text-slate-300">
+      <div className="flex gap-2"><span className="text-slate-500">$</span> <span>Initializing Python environment...</span></div>
+      {(currentStep === 'ml' || currentStep === 'hypothesis' || currentStep === 'validator' || currentStep === 'inference' || currentStep === 'decision') && (
+        <div className="flex gap-2 animate-in fade-in duration-300"><span className="text-slate-500">$</span> <span className="text-emerald-400">Loading historical zone metrics... [OK]</span></div>
+      )}
+      {(currentStep === 'hypothesis' || currentStep === 'validator' || currentStep === 'inference' || currentStep === 'decision') && (
+        <div className="flex gap-2 animate-in fade-in duration-300"><span className="text-slate-500">$</span> <span className="text-indigo-400">evaluating model.predict(neural_drift) ...</span></div>
+      )}
+      {(currentStep === 'inference' || currentStep === 'decision' || currentStep === 'proof') && (
+        <div className="flex gap-2 animate-in fade-in duration-300"><span className="text-slate-500">$</span> <span className="text-amber-400">Outputting probabilistic bounds to AR Engine -&gt;</span></div>
+      )}
     </div>
   </div>
 );
@@ -793,6 +845,7 @@ export default function App() {
   const {
     numZones, setNumZones,
     zones, setZones,
+    domain, setDomain,
     rules, setRules,
     hypotheses, setHypotheses,
     isInferring, setIsInferring,
@@ -833,6 +886,9 @@ export default function App() {
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [newRule, setNewRule] = useState<LogicRule>({ id: 'R_NEW', head: '', body: [], probability: 0.9, stratum: 1 });
   const [isConvertingIntent, setIsConvertingIntent] = useState(false);
+  const [isRetrievingContext, setIsRetrievingContext] = useState(false);
+  const [ragChunks, setRagChunks] = useState<{ source: string, text: string }[]>([]);
+  const [arEngine, setArEngine] = useState<'problog' | 'asp'>('problog');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editingRule, setEditingRule] = useState<LogicRule | null>(null);
 
@@ -855,6 +911,8 @@ export default function App() {
     });
     setMaxArityBenchmark(Math.min(4, Math.max(1, maxFound)));
   }, []);
+
+  const mapping = DOMAIN_MAPPING[domain];
 
   // --- Handlers ---
 
@@ -996,6 +1054,16 @@ export default function App() {
       return;
     }
 
+    // Simulate RAG Retrieval
+    setRagChunks([]);
+    setIsRetrievingContext(true);
+    await new Promise(r => setTimeout(r, 600));
+    setRagChunks([{ source: "OpenRA Tactical Manual v1.2", text: "When hostile forces are proximal and zone is vulnerable, prioritize defense to prevent sector loss." }]);
+    await new Promise(r => setTimeout(r, 600));
+    setRagChunks(prev => [...prev, { source: "Historical ML Datasets (Run 42)", text: "Neural drift indicated p_attack > 0.8 usually precedes an invasion event." }]);
+    await new Promise(r => setTimeout(r, 800));
+    setIsRetrievingContext(false);
+
     try {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `
@@ -1013,6 +1081,9 @@ export default function App() {
         - Proximal(X, Y)
         - Reinforced(X)
         
+        Available RAG Context:
+        ${ragChunks.map(c => `[${c.source}]: ${c.text}`).join('\n')}
+
         Example: "If a zone is vulnerable and has a proximal hostile that is strong, we should defend it"
         Output: [
           { 
@@ -1193,17 +1264,19 @@ export default function App() {
 
               <div className="flex items-center gap-3">
                 {gamePhase === 'awaiting_inference' && (
-                  <button
-                    onClick={handleInference}
-                    disabled={isInferring}
-                    className={cn(
-                      "flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg text-white shadow-indigo-500/20 active:scale-95",
-                      isInferring ? "bg-indigo-600/50 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"
-                    )}
-                  >
-                    {isInferring ? <RefreshCw className="animate-spin" size={14} /> : <Play size={14} />}
-                    <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={handleInference}
+                      disabled={isInferring}
+                      className={cn(
+                        "flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-bold uppercase transition-all shadow-lg text-white shadow-indigo-500/20 active:scale-95",
+                        isInferring ? "bg-indigo-600/50 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"
+                      )}
+                    >
+                      {isInferring ? <RefreshCw className="animate-spin" size={14} /> : <Play size={14} />}
+                      <span>{isInferring ? 'Evaluating...' : 'Run Inference'}</span>
+                    </button>
+                  </>
                 )}
 
                 {gamePhase === 'reviewing_recommendations' && (
@@ -1230,10 +1303,15 @@ export default function App() {
               </div>
             )}
 
+            {currentStep !== 'ml' && (
+              <ToolExecutionConsole currentStep={currentStep} />
+            )}
+
             <div className="w-full">
               <DecisionCard
                 facts={inferredFacts}
                 zones={zones}
+                domain={domain}
                 onShowProof={handleShowProof}
                 selectedFactId={selectedFact?.id}
                 onApply={handleApplyRecommendation}
@@ -1245,14 +1323,30 @@ export default function App() {
 
             <MapGrid
               zones={zones}
+              domain={domain}
               highlightedZone={highlightedZone}
               onEditZone={(updated) => setZones(zones.map(z => z.id === updated.id ? updated : z))}
             />
 
             <div className="flex items-center gap-4">
               <div className="flex-1 flex items-center gap-4 bg-slate-900/50 border border-slate-800 rounded-xl px-4 py-2">
+
                 <div className="flex items-center gap-3 border-r border-slate-800 pr-4">
-                  <span className="text-[10px] font-mono text-slate-500 uppercase">Zones:</span>
+                  <span className="text-[10px] font-mono text-slate-500 uppercase">Domain:</span>
+                  <select
+                    value={domain}
+                    onChange={e => setDomain(e.target.value as DomainPreset)}
+                    className="bg-slate-800 border border-slate-700 text-xs font-bold text-white rounded px-2 py-1 outline-none focus:border-indigo-500"
+                    disabled={gamePhase !== 'awaiting_inference'}
+                  >
+                    <option value="abstract">Abstract Theater</option>
+                    <option value="catan">Settlers of Catan</option>
+                    <option value="openra">OpenRA Combat</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 border-r border-slate-800 pr-4">
+                  <span className="text-[10px] font-mono text-slate-500 uppercase">{mapping.zones}:</span>
                   <input
                     type="range" min="2" max="12" step="1"
                     value={numZones}
@@ -1310,6 +1404,8 @@ export default function App() {
             onIntentChange={setHumanIntent}
             onProposeIntent={handleProposeIntent}
             isConvertingIntent={isConvertingIntent}
+            isRetrievingContext={isRetrievingContext}
+            ragChunks={ragChunks}
           />
         );
       case 'validator':
@@ -1327,6 +1423,16 @@ export default function App() {
                     <h3 className="text-sm font-bold flex items-center gap-2 text-white">
                       Active Rule Set
                     </h3>
+                    <div className="flex bg-slate-800 rounded p-1">
+                      <button
+                        onClick={() => setArEngine('problog')}
+                        className={cn("px-2 py-0.5 text-[10px] uppercase font-bold rounded", arEngine === 'problog' ? "bg-amber-600/50 text-amber-100" : "text-slate-400 hover:text-white")}
+                      >ProbLog</button>
+                      <button
+                        onClick={() => setArEngine('asp')}
+                        className={cn("px-2 py-0.5 text-[10px] uppercase font-bold rounded", arEngine === 'asp' ? "bg-indigo-600/50 text-indigo-100" : "text-slate-400 hover:text-white")}
+                      >ASP</button>
+                    </div>
                     <ExplainButton
                       context="ruleset"
                       data={{ rules }}
@@ -1412,7 +1518,8 @@ export default function App() {
                             </div>
                           </div>
                           <div className="text-sm font-mono text-white mb-2">
-                            {rule.head} <span className="text-slate-500 mx-2">←</span> {rule.body.join(', ')}
+                            {arEngine === 'problog' && <span className="text-amber-400 mr-2">{rule.probability.toFixed(2)} ::</span>}
+                            {rule.head} <span className="text-slate-500 mx-2">:-</span> {rule.body.join(', ')}.
                           </div>
                           {rule.description && (
                             <p className="text-[11px] text-slate-500 italic leading-relaxed border-t border-slate-800/50 pt-2">

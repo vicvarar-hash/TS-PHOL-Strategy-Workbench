@@ -8,11 +8,14 @@ import { motion } from 'motion/react';
 import { Bot, Target, Shield, Zap, Info, ChevronRight, AlertTriangle, Calculator, Play, CheckCircle2, FileText, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { GroundedFact, ZoneState } from '../types';
+import { DomainPreset, DOMAIN_MAPPING } from '../hooks/useInference';
 import { GoogleGenAI } from '@google/genai';
+import ReactMarkdown from 'react-markdown';
 
 interface RecommendationCardProps {
   fact: GroundedFact;
   zone: ZoneState | undefined;
+  domain: DomainPreset;
   isPrimary: boolean;
   onShowProof: (fact: GroundedFact) => void;
   isSelected: boolean;
@@ -22,8 +25,9 @@ interface RecommendationCardProps {
 }
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({
-  fact, zone, isPrimary, onShowProof, isSelected, onApply, isApplied, disabled
+  fact, zone, domain, isPrimary, onShowProof, isSelected, onApply, isApplied, disabled
 }) => {
+  const mapping = DOMAIN_MAPPING[domain];
   const [showMath, setShowMath] = React.useState(false);
   const action = fact.args[0];
   const isAttack = action === 'Attack';
@@ -32,7 +36,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
   const reasons = fact.childFacts.map(f => {
     if (f.predicate === 'Defend') return "Critical vulnerability detected.";
     if (f.predicate === 'Attack') return "High probability of success.";
-    if (f.predicate === 'Vulnerable') return "Sector defenses are below threshold.";
+    if (f.predicate === 'Vulnerable') return `${mapping.zone} defenses are below threshold.`;
     if (f.predicate === 'HighValue') return "Strategic resources are concentrated here.";
     if (f.predicate === 'SupplyAvailable') return "Logistics support is confirmed.";
     if (f.predicate === 'NoFog') return "Visual confirmation of target state.";
@@ -82,7 +86,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
 
       <div className="p-4 flex-1 flex flex-col gap-3">
         <div>
-          <div className="text-[8px] font-mono text-slate-500 uppercase tracking-widest mb-0.5">Sector</div>
+          <div className="text-[8px] font-mono text-slate-500 uppercase tracking-widest mb-0.5">{mapping.zone}</div>
           <div className="text-xs font-bold text-white">{zone?.id}: {zone?.name}</div>
         </div>
 
@@ -159,6 +163,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
 interface DecisionCardProps {
   facts: GroundedFact[];
   zones: ZoneState[];
+  domain: DomainPreset;
   onShowProof: (fact: GroundedFact) => void;
   selectedFactId?: string;
   onApply: (action: string, zoneId: string, factId: string) => void;
@@ -168,11 +173,18 @@ interface DecisionCardProps {
 }
 
 export const DecisionCard: React.FC<DecisionCardProps> = ({
-  facts, zones, onShowProof, selectedFactId, onApply, appliedFactIds, disabled, cumulativeStats
+  facts, zones, domain, onShowProof, selectedFactId, onApply, appliedFactIds, disabled, cumulativeStats
 }) => {
   const [reportOpen, setReportOpen] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [commanderReport, setCommanderReport] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (facts.length === 0) {
+      setReportOpen(false);
+      setCommanderReport(null);
+    }
+  }, [facts]);
 
   const generateReport = async () => {
     setIsGenerating(true);
@@ -195,10 +207,10 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
         All Logically Inferred Facts (Full Battlefield Assessment):
         ${JSON.stringify(facts.map(f => ({ pred: f.predicate, args: f.args, conf: f.probability })), null, 2)}
         
-        Write a concise, 3-paragraph "Commander's Assessment". 
-        Paragraph 1: Synthesize the overall battlefield balance and health based on all inferred facts.
+        Write a concise, 3-paragraph "Commander's Assessment" using rich **Markdown formatting** (bolding key terms, using bullet points if needed).
+        Paragraph 1: Synthesize the overall battlefield balance and health based on all inferred facts. Bold critical zone names.
         Paragraph 2: Explain in plain English *why* the top "Execute" recommendations were chosen based on the logic.
-        Paragraph 3: Note any glaring risks or non-selected vulnerabilities.
+        Paragraph 3: Note any glaring risks or non-selected vulnerabilities. Use bullet points for multiple risks.
       `;
 
       const response = await ai.models.generateContent({
@@ -276,8 +288,8 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             {isGenerating ? (
               <p className="text-xs text-slate-500 animate-pulse">Consulting LLM models for battlefield analysis...</p>
             ) : (
-              <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap font-serif">
-                {commanderReport}
+              <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap prose prose-invert prose-headings:text-indigo-300 prose-strong:text-amber-400 max-w-none">
+                <ReactMarkdown>{commanderReport}</ReactMarkdown>
               </div>
             )}
           </div>
@@ -290,6 +302,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             key={fact.id}
             fact={fact}
             zone={zones.find(z => z.id === fact.args[1])}
+            domain={domain}
             isPrimary={i === 0}
             onShowProof={onShowProof}
             isSelected={selectedFactId === fact.id}

@@ -9,6 +9,34 @@ import { TSPHOL_Engine, ZONE_NAMES, DEFAULT_RULES } from '../engine/tsphol';
 import { HypothesisGenerator } from '../engine/hypothesisGenerator';
 import { ScalingMetrics } from '../engine/scalingMetrics';
 
+export type DomainPreset = 'abstract' | 'catan' | 'openra';
+
+export const DOMAIN_MAPPING: Record<DomainPreset, { zone: string; zones: string; allied: string; enemy: string; supply: string; value: string }> = {
+  abstract: { zone: 'Zone', zones: 'Zones', allied: 'Allied', enemy: 'Enemy', supply: 'Supply', value: 'Value' },
+  catan: { zone: 'Hex', zones: 'Hexes', allied: 'Settlements', enemy: 'Robbers', supply: 'Resources', value: 'VP' },
+  openra: { zone: 'Sector', zones: 'Sectors', allied: 'GDI', enemy: 'NOD', supply: 'Tiberium', value: 'StratVal' }
+};
+
+export const DOMAIN_RULES: Record<DomainPreset, LogicRule[]> = {
+  abstract: DEFAULT_RULES,
+  catan: [
+    { id: 'R1', head: 'RobberThreat(z)', body: ['EnemyPresence(z)', 'LowDefense(z)'], probability: 0.9, stratum: 1, description: "A hex is threatened by robbers if they are present and our settlements are weak." },
+    { id: 'R2', head: 'ExpansionTarget(z)', body: ['StrategicValue(z)', 'SupplyRich(z)'], probability: 0.85, stratum: 1, description: "A hex is a good target for expansion if it yields good resources and VP." },
+    { id: 'R3', head: 'Defend(z)', body: ['RobberThreat(z)', 'ExpansionTarget(z)'], probability: 0.95, stratum: 2, description: "Build a knight or defend if an expansion target is threatened." },
+    { id: 'R4', head: 'Attack(z)', body: ['EnemyPresence(z)', 'p_success_high(z)'], probability: 0.8, stratum: 2, description: "Move the robber to disrupt enemy hexes with high probability." },
+    { id: 'R5', head: 'Execute(BuildSettlement, z)', body: ['Defend(z)', 'SupplyAvailable(z)'], probability: 0.99, stratum: 3, description: "Execute a settlement build or upgrade if resources allow." },
+    { id: 'R6', head: 'Execute(PlayKnight, z)', body: ['Attack(z)', 'NoFog(z)'], probability: 0.9, stratum: 3, description: "Execute a knight action if visibility allows." }
+  ],
+  openra: [
+    { id: 'R1', head: 'Vulnerable(z)', body: ['EnemyPresence(z)', 'LowDefense(z)'], probability: 0.9, stratum: 1, description: "A sector is vulnerable if hostiles are present and MCV defenses are low." },
+    { id: 'R2', head: 'TiberiumRich(z)', body: ['StrategicValue(z)', 'SupplyRich(z)'], probability: 0.85, stratum: 1, description: "Sector has dense Tiberium fields and strategic value." },
+    { id: 'R3', head: 'Defend(z)', body: ['Vulnerable(z)', 'TiberiumRich(z)'], probability: 0.95, stratum: 2, description: "Defend vulnerable Tiberium fields." },
+    { id: 'R4', head: 'Attack(z)', body: ['EnemyPresence(z)', 'p_success_high(z)'], probability: 0.8, stratum: 2, description: "Attack coordinates where ML predicts high success against hostiles." },
+    { id: 'R5', head: 'Execute(DeployMCV, z)', body: ['Defend(z)', 'SupplyAvailable(z)'], probability: 0.99, stratum: 3, description: "Deploy an MCV or fortifications." },
+    { id: 'R6', head: 'Execute(Airstrike, z)', body: ['Attack(z)', 'NoFog(z)'], probability: 0.9, stratum: 3, description: "Execute Airstrike if no fog of war covers the target." }
+  ]
+};
+
 // Simple seeded random for reproducibility
 const mulberry32 = (a: number) => {
   return () => {
@@ -35,6 +63,9 @@ export function useInference() {
   const [lastTurnReport, setLastTurnReport] = useState<TurnReport | null>(null);
   const [isStale, setIsStale] = useState(false);
   const [isGeneratingHypothesis, setIsGeneratingHypothesis] = useState(false);
+
+  const [domain, setDomain] = useState<DomainPreset>('abstract');
+
 
   const hypothesisGenerator = new HypothesisGenerator();
 
@@ -231,6 +262,10 @@ export function useInference() {
   const resetSession = useCallback(() => {
     setTurn(1);
     setLastTurnReport(null);
+    setInferredFacts([]);
+    setHypotheses([]);
+    setValidation({ valid: true, errors: [] });
+    setCurrentStep('ml');
     setSeed(Math.random().toString(36).substring(7));
     setIsStale(true);
   }, []);
@@ -238,6 +273,10 @@ export function useInference() {
   useEffect(() => {
     initZones(numZones);
   }, [numZones, initZones]);
+
+  useEffect(() => {
+    setRules(DOMAIN_RULES[domain]);
+  }, [domain]);
 
   useEffect(() => {
     const engine = new TSPHOL_Engine(zones, rules);
@@ -300,10 +339,10 @@ export function useInference() {
 
     return { facts, bestDecision };
   };
-
   return {
     numZones, setNumZones,
     zones, setZones,
+    domain, setDomain,
     rules, setRules,
     hypotheses, setHypotheses,
     isInferring, setIsInferring,
